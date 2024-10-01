@@ -122,7 +122,7 @@ int startX, startY, tracking = 0;
 
 // Camera Spherical Coordinates
 float alpha = 39.0f, beta = 51.0f;
-float r = 10.0f;
+float r = 20.0f;
 
 // Frame counting and FPS computation
 long myTime,timebase = 0,frame = 0;
@@ -157,9 +157,11 @@ void refresh(int value)
 	if (boat.speed > 0) boat.speed -= speed_decay;
 	else if (boat.speed < 0) boat.speed += speed_decay;
 
-	cams[2].camPos[0] = boat.position[0];
-	cams[2].camPos[1] = 10.0f;
-	cams[2].camPos[2] = boat.position[2] - 10.0f;
+	if (boat.speed != 0) {
+		cams[2].camPos[0] += boat.speed * sin(angle_rad) * deltaT;
+		cams[2].camPos[2] += boat.speed * cos(angle_rad) * deltaT;
+	}
+
 
 	cams[2].camTarget[0] = boat.position[0];
 	cams[2].camTarget[1] = 0.0f;
@@ -279,6 +281,7 @@ void renderScene(void) {
 			translate(MODEL, boat.position[0], 0, boat.position[2]);
 			rotate(MODEL, boat.angle, 0, 1, 0);
 			scale(MODEL, 0.4f, 0.2f, 1.0f);
+
 			//OLA teste test test
 		}
 		
@@ -461,9 +464,9 @@ void processMouseMotion(int xx, int yy)
 			rAux = 0.1f;
 	}
 
-	cams[2].camPos[0] = rAux * sin(alphaAux * 3.14f / 180.0f) * cos(betaAux * 3.14f / 180.0f);
-	cams[2].camPos[2] = rAux * cos(alphaAux * 3.14f / 180.0f) * cos(betaAux * 3.14f / 180.0f);
-	cams[2].camPos[1] = rAux *   						       sin(betaAux * 3.14f / 180.0f);
+	cams[2].camPos[0] = boat.position[0] + rAux * sin(alphaAux * 3.14f / 180.0f) * cos(betaAux * 3.14f / 180.0f);
+	cams[2].camPos[2] = boat.position[2] + rAux * cos(alphaAux * 3.14f / 180.0f) * cos(betaAux * 3.14f / 180.0f);
+	cams[2].camPos[1] = rAux * sin(betaAux * 3.14f / 180.0f);
 
 //  uncomment this if not using an idle or refresh func
 //	glutPostRedisplay();
@@ -579,9 +582,9 @@ void init()
 
 	float angle_rad = boat.angle * (3.14 / 180.0f);
 
-	cams[2].camPos[0] = (-cos(angle_rad) * boat.speed * 5.0f);
-	cams[2].camPos[1] = 20.0f;
-	cams[2].camPos[2] = (-sin(angle_rad) * boat.speed * 5.0f);
+	cams[2].camPos[0] = r * sin(alpha * 3.14f / 180.0f) * cos(beta * 3.14f / 180.0f);
+	cams[2].camPos[1] = r * sin(beta * 3.14f / 180.0f);
+	cams[2].camPos[2] = r * cos(alpha * 3.14f / 180.0f) * cos(beta * 3.14f / 180.0f);
 
 
 	// create geometry and VAO of the grass plane
