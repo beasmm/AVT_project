@@ -248,7 +248,7 @@ void renderScene(void) {
 	int objId=0; //id of the object mesh - to be used as index of mesh: Mymeshes[objID] means the current mesh
 
 	int buoy = 0;
-	for (int i = 0 ; i < 14; ++i) {
+	for (int i = 0 ; i < 19; ++i) {
 
 		// send the material
 		loc = glGetUniformLocation(shader.getProgramIndex(), "mat.ambient");
@@ -266,10 +266,10 @@ void renderScene(void) {
 		if (i == 1) translate(MODEL, -10.0f, 0.01f, 0.0f);
 
 		// fix house base offset
-		if (i == 2) translate(MODEL, -12.5f, 0.0f, -0.5f);
+		if (i == 2) translate(MODEL, -12.5f, 0.5f, -0.5f);
 
-		if (i == 3) {
-			translate(MODEL, -12.0f, 1.0f, 0.0f);
+		if (i == 3) { //house roof
+			translate(MODEL, -12.5f, 1.0f, -0.5f);
 			rotate(MODEL, 45, 0, 1, 0);
 		}
 
@@ -277,15 +277,55 @@ void renderScene(void) {
 
 		if (i == 5 || i == 6) translate(MODEL, -9.0f, 0.25f, 2.0f); // tree
 
-		if (i == 7) { // boat
-			translate(MODEL, boat.position[0], 0, boat.position[2]);
+		if (i == 7) { // boat base
+			translate(MODEL, boat.position[0], 0.1, boat.position[2]);
 			rotate(MODEL, boat.angle, 0, 1, 0);
-			scale(MODEL, 0.4f, 0.2f, 1.0f);
-
-			//OLA teste test test
+			scale(MODEL, 0.4f, 0.2f, 0.7f);
+		}
+		if (i == 8) { // boat front
+			translate(MODEL, boat.position[0], 0.1, boat.position[2]);
+			rotate(MODEL, boat.angle, 0, 1, 0);
+			translate(MODEL, 0.0f, 0.0f, 0.35f);
+			rotate(MODEL, 90, 1, 0, 0);
+			scale(MODEL, 1, 1, 0.5);
+			rotate(MODEL, 45, 0, 1, 0);
+		}
+		if (i == 9 ) { //row handles
+			translate(MODEL, boat.position[0], 0.15f, boat.position[2]);
+			rotate(MODEL, boat.angle, 0, 1, 0);
+			if (boat.paddle_direction == 1)	rotate(MODEL, -boat.angle, 1, 0, 0);
+			else rotate(MODEL, boat.angle, 1, 0, 0);
+			translate(MODEL, 0.3f, 0.0f, 0.0f);
+			rotate(MODEL, 45, 0, 0, 1);
+		}
+		if (i == 10) {
+			translate(MODEL, boat.position[0], 0.15f, boat.position[2]);
+			rotate(MODEL, boat.angle, 0, 1, 0);
+			if (boat.paddle_direction == 1)	rotate(MODEL, -boat.angle, 1, 0, 0);
+			else rotate(MODEL, boat.angle, 1, 0, 0);
+			translate(MODEL, -0.3f, 0.0f, 0.0f);
+			rotate(MODEL, -45, 0, 0, 1);
+		}
+		if (i == 11) { //row paddles
+			translate(MODEL, boat.position[0], 0.0f, boat.position[2]);
+			rotate(MODEL, boat.angle, 0, 1, 0);
+			translate(MODEL, 0.0f, 0.15f, 0.0f);
+			rotate(MODEL, 180 - boat.angle, 1, 0, 0);
+			translate(MODEL, 0.4f, 0.15f, 0.0f);
+			rotate(MODEL, -45, 0, 0, 1);
+			scale(MODEL, 0.1f, 0.15f, 0.05f);
+		}
+		if (i == 12) {
+			translate(MODEL, boat.position[0], 0.0f, boat.position[2]);
+			rotate(MODEL, boat.angle, 0, 1, 0);
+			translate(MODEL, 0.0f, 0.15f, 0.0f);
+			rotate(MODEL, 180 - boat.angle, 1, 0, 0);
+			translate(MODEL, -0.4f, 0.15f, 0.0f);
+			rotate(MODEL, 45, 0, 0, 1);
+			scale(MODEL, 0.1f, 0.15f, 0.05f);
 		}
 		
-		if (i > 7) {
+		if (i > 12) {
 			translate(MODEL, buoy_positions[buoy][0], 0.0f, buoy_positions[buoy][1]);
 			buoy++;
 		}
@@ -694,7 +734,7 @@ void init()
 	amesh.mat.texCount = texcount;
 	myMeshes.push_back(amesh);
 
-	// create geometry and VAO of the sleigh
+	// create geometry and VAO of the boat
 	amesh = createCube();
 	memcpy(amesh.mat.ambient, amb3, 4 * sizeof(float));
 	memcpy(amesh.mat.diffuse, diff3, 4 * sizeof(float));
@@ -702,6 +742,37 @@ void init()
 	memcpy(amesh.mat.emissive, emissive, 4 * sizeof(float));
 	amesh.mat.shininess = shininess;
 	amesh.mat.texCount = texcount;
+	myMeshes.push_back(amesh);
+
+
+	amesh = createCone(0.2, 0.3, 4); // front of the boat
+	memcpy(amesh.mat.ambient, amb3, 4 * sizeof(float));
+	memcpy(amesh.mat.diffuse, diff3, 4 * sizeof(float));
+	memcpy(amesh.mat.specular, spec3, 4 * sizeof(float));
+	memcpy(amesh.mat.emissive, emissive, 4 * sizeof(float));
+	amesh.mat.shininess = shininess;
+	amesh.mat.texCount = texcount;
+	myMeshes.push_back(amesh);
+
+	// create rows
+	amesh = createCylinder(0.4, 0.03, 4);
+	memcpy(amesh.mat.ambient, amb3, 4 * sizeof(float));
+	memcpy(amesh.mat.diffuse, diff3, 4 * sizeof(float));
+	memcpy(amesh.mat.specular, spec3, 4 * sizeof(float));
+	memcpy(amesh.mat.emissive, emissive, 4 * sizeof(float));
+	amesh.mat.shininess = shininess;
+	amesh.mat.texCount = texcount;
+	myMeshes.push_back(amesh);
+	myMeshes.push_back(amesh);
+
+	amesh = createCube();
+	memcpy(amesh.mat.ambient, amb3, 4 * sizeof(float));
+	memcpy(amesh.mat.diffuse, diff3, 4 * sizeof(float));
+	memcpy(amesh.mat.specular, spec3, 4 * sizeof(float));
+	memcpy(amesh.mat.emissive, emissive, 4 * sizeof(float));
+	amesh.mat.shininess = shininess;
+	amesh.mat.texCount = texcount;
+	myMeshes.push_back(amesh);
 	myMeshes.push_back(amesh);
 
 	// create buoys
