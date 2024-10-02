@@ -94,6 +94,9 @@ public:
 	int paddle_direction = 1;
 	float direction[3] = { 0.0f, 0.0f, 0.0f };
 	float position[3] = { 0.0f, 0.0f, 0.0f };
+	bool left_paddle_working = false;
+	bool right_paddle_working = false;
+	int paddle_angle = 0;
 };
 
 Boat boat;
@@ -150,6 +153,19 @@ void timer(int value)
 
 void refresh(int value)
 {
+	if (boat.left_paddle_working || boat.right_paddle_working) {
+		if (boat.speed <= 1 && boat.paddle_direction == 1)
+			boat.speed += 0.1 * boat.paddle_strength;
+		else if (boat.speed >= -1)
+			boat.speed -= 0.1 * boat.paddle_strength;
+
+		if (boat.left_paddle_working && !boat.right_paddle_working)
+			boat.angle += 2;
+		else if (!boat.left_paddle_working && boat.right_paddle_working)
+			boat.angle -= 2;
+		boat.paddle_angle += 2 * boat.paddle_strength;
+	}
+
 	float angle_rad = boat.angle * (3.14 / 180.0f);
 	boat.position[0] += boat.speed * sin(angle_rad) * deltaT;
 	boat.position[2] += boat.speed * cos(angle_rad) * deltaT;
@@ -290,38 +306,50 @@ void renderScene(void) {
 			scale(MODEL, 1, 1, 0.5);
 			rotate(MODEL, 45, 0, 1, 0);
 		}
-		if (i == 9 ) { //row handles
+		if (i == 10) { // left row handle
 			translate(MODEL, boat.position[0], 0.15f, boat.position[2]);
 			rotate(MODEL, boat.angle, 0, 1, 0);
-			if (boat.paddle_direction == 1)	rotate(MODEL, -boat.angle, 1, 0, 0);
-			else rotate(MODEL, boat.angle, 1, 0, 0);
-			translate(MODEL, 0.3f, 0.0f, 0.0f);
-			rotate(MODEL, 45, 0, 0, 1);
-		}
-		if (i == 10) {
-			translate(MODEL, boat.position[0], 0.15f, boat.position[2]);
-			rotate(MODEL, boat.angle, 0, 1, 0);
-			if (boat.paddle_direction == 1)	rotate(MODEL, -boat.angle, 1, 0, 0);
-			else rotate(MODEL, boat.angle, 1, 0, 0);
+			if (boat.left_paddle_working && boat.paddle_direction == 1)	
+				rotate(MODEL, boat.paddle_angle, 1, 0, 0);
+			else if (boat.left_paddle_working && boat.paddle_direction == 0)
+				rotate(MODEL, -boat.paddle_angle, 1, 0, 0);
 			translate(MODEL, -0.3f, 0.0f, 0.0f);
 			rotate(MODEL, -45, 0, 0, 1);
 		}
-		if (i == 11) { //row paddles
-			translate(MODEL, boat.position[0], 0.0f, boat.position[2]);
+		if (i == 9 ) { // right row handle
+			translate(MODEL, boat.position[0], 0.15f, boat.position[2]);
 			rotate(MODEL, boat.angle, 0, 1, 0);
-			translate(MODEL, 0.0f, 0.15f, 0.0f);
-			rotate(MODEL, 180 - boat.angle, 1, 0, 0);
-			translate(MODEL, 0.4f, 0.15f, 0.0f);
-			rotate(MODEL, -45, 0, 0, 1);
-			scale(MODEL, 0.1f, 0.15f, 0.05f);
+			if (boat.right_paddle_working && boat.paddle_direction == 1)
+				rotate(MODEL, boat.paddle_angle, 1, 0, 0);
+			else if (boat.right_paddle_working && boat.paddle_direction == 0)
+				rotate(MODEL, -boat.paddle_angle, 1, 0, 0);
+			translate(MODEL, 0.3f, 0.0f, 0.0f);
+			rotate(MODEL, 45, 0, 0, 1);
 		}
-		if (i == 12) {
+		if (i == 11) { //left row paddle
 			translate(MODEL, boat.position[0], 0.0f, boat.position[2]);
 			rotate(MODEL, boat.angle, 0, 1, 0);
 			translate(MODEL, 0.0f, 0.15f, 0.0f);
-			rotate(MODEL, 180 - boat.angle, 1, 0, 0);
+			if (boat.left_paddle_working && boat.paddle_direction == 1)
+				rotate(MODEL,boat.paddle_angle, 1, 0, 0);
+			else if (boat.left_paddle_working && boat.paddle_direction == 0)
+				rotate(MODEL, -boat.paddle_angle, 1, 0, 0);
+			rotate(MODEL, 180, 1, 0, 0);
 			translate(MODEL, -0.4f, 0.15f, 0.0f);
 			rotate(MODEL, 45, 0, 0, 1);
+			scale(MODEL, 0.1f, 0.15f, 0.05f);
+		}
+		if (i == 12) { //right3 row paddle
+			translate(MODEL, boat.position[0], 0.0f, boat.position[2]);
+			rotate(MODEL, boat.angle, 0, 1, 0);
+			translate(MODEL, 0.0f, 0.15f, 0.0f);
+			if (boat.right_paddle_working && boat.paddle_direction == 1)
+				rotate(MODEL, boat.paddle_angle, 1, 0, 0);
+			else if (boat.right_paddle_working && boat.paddle_direction == 0)
+				rotate(MODEL, -boat.paddle_angle, 1, 0, 0);
+			rotate(MODEL, 180, 1, 0, 0);
+			translate(MODEL, 0.4f, 0.15f, 0.0f);
+			rotate(MODEL, -45, 0, 0, 1);
 			scale(MODEL, 0.1f, 0.15f, 0.05f);
 		}
 		
@@ -400,18 +428,10 @@ void processKeys(unsigned char key, int xx, int yy)
 		case '3': active = 2; break;
 
 		case 'a':
-			if (boat.speed <= 1 && boat.paddle_direction == 1) 
-				boat.speed += 0.1 * boat.paddle_strength;
-			else if (boat.speed >= -1)
-				boat.speed -= 0.1 * boat.paddle_strength;
-			boat.angle += 5;
+			boat.left_paddle_working = true;
 			break;
 		case 'd':
-			if (boat.speed <= 1 && boat.paddle_direction == 1) 
-				boat.speed += 0.1 * boat.paddle_strength;
-			else if (boat.speed >= -1)
-				boat.speed -= 0.1 * boat.paddle_strength;
-			boat.angle -= 5;
+			boat.right_paddle_working = true;
 			break;
 		case 's':
 			if (boat.paddle_direction == 1) boat.paddle_direction = 0;
@@ -436,6 +456,16 @@ void processKeys(unsigned char key, int xx, int yy)
 	}
 }
 
+void processKeysUp(unsigned char key, int xx, int yy) {
+	switch (key) {
+		case 'a':
+			boat.left_paddle_working = false;
+			break;
+		case 'd':
+			boat.right_paddle_working = false;
+			break;
+	}
+}
 
 // ------------------------------------------------------------
 //
@@ -832,6 +862,7 @@ int main(int argc, char **argv) {
 
 //	Mouse and Keyboard Callbacks
 	glutKeyboardFunc(processKeys);
+	glutKeyboardUpFunc(processKeysUp);
 	glutMouseFunc(processMouseButtons);
 	glutMotionFunc(processMouseMotion);
 	glutMouseWheelFunc ( mouseWheel ) ;
