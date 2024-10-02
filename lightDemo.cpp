@@ -73,8 +73,8 @@ extern float mNormal3x3[9];
 GLint pvm_uniformId;
 GLint vm_uniformId;
 GLint normal_uniformId;
-GLint lPos_uniformId;
-GLint plLoc0, plLoc1, plLoc2, plLoc3, plLoc4, plLoc5;
+GLint lPos_uniformId[6];
+//GLfloat l_pos[6];
 GLint tex_loc, tex_loc1, tex_loc2;
 	
 class Camera{
@@ -115,7 +115,7 @@ float buoy_positions[6][2] = {
 
 // lights
 float directionalLightPos[4] = { 1.0f, 1000.0f,1.0f, 0.0f };
-float pointLightPos[6][4] = { };
+float pointLightPos[6][4];
 
 
 
@@ -135,7 +135,9 @@ float lightPos[4] = {4.0f, 6.0f, 2.0f, 1.0f};
 void setupPointLightPos() {
 	for (int i = 0; i < 6; i++) {
 		pointLightPos[i][0] = buoy_positions[i][0];
-		pointLightPos[i][1] = buoy_positions[i][1];
+		pointLightPos[i][1] = 0.7f;
+		pointLightPos[i][2] = buoy_positions[i][1];
+		pointLightPos[i][3] = 1.0f;
 	}
 }
 
@@ -249,17 +251,14 @@ void renderScene(void) {
 		//glUniform4fv(lPos_uniformId, 1, lightPos); //efeito capacete do mineiro, ou seja lighPos foi definido em eye coord 
 
 		float res[4];
-		multMatrixPoint(VIEW, lightPos,res);   //lightPos definido em World Coord so is converted to eye space
-		glUniform4fv(lPos_uniformId, 1, res);
+		//multMatrixPoint(VIEW, lightPos,res);   //lightPos definido em World Coord so is converted to eye space
+		//glUniform4fv(lPos_uniformId, 1, res);
 
 		//send the point light positions
-		glUniform4fv(plLoc0, 1, pointLightPos[0]);
-		glUniform4fv(plLoc1, 1, pointLightPos[1]);
-		glUniform4fv(plLoc2, 1, pointLightPos[2]);
-		glUniform4fv(plLoc3, 1, pointLightPos[3]);
-		glUniform4fv(plLoc4, 1, pointLightPos[4]);
-		glUniform4fv(plLoc5, 1, pointLightPos[5]);
-		
+		for (int i = 0; i < 6; i++) {
+			multMatrixPoint(VIEW, pointLightPos[i], res);
+			glUniform4fv(lPos_uniformId[i], 1, res);
+		}
 
 	int objId=0; //id of the object mesh - to be used as index of mesh: Mymeshes[objID] means the current mesh
 
@@ -566,8 +565,8 @@ GLuint setupShaders() {
 
 	// Shader for models
 	shader.init();
-	shader.loadShader(VSShaderLib::VERTEX_SHADER, "shaders/pointlight_gouraud.vert");
-	shader.loadShader(VSShaderLib::FRAGMENT_SHADER, "shaders/pointlight_gouraud.frag");
+	shader.loadShader(VSShaderLib::VERTEX_SHADER, "shaders/pointlight_phong.vert");
+	shader.loadShader(VSShaderLib::FRAGMENT_SHADER, "shaders/pointlight_phong.frag");
 
 	// set semantics for the shader variables
 	glBindFragDataLocation(shader.getProgramIndex(), 0,"colorOut");
@@ -587,13 +586,15 @@ GLuint setupShaders() {
 	pvm_uniformId = glGetUniformLocation(shader.getProgramIndex(), "m_pvm");
 	vm_uniformId = glGetUniformLocation(shader.getProgramIndex(), "m_viewModel");
 	normal_uniformId = glGetUniformLocation(shader.getProgramIndex(), "m_normal");
-	lPos_uniformId = glGetUniformLocation(shader.getProgramIndex(), "l_pos");
-	plLoc0 = glGetUniformLocation(shader.getProgramIndex(), "pointLights[0].position");
-	plLoc1 = glGetUniformLocation(shader.getProgramIndex(), "pointLights[1].position");
-	plLoc2 = glGetUniformLocation(shader.getProgramIndex(), "pointLights[2].position");
-	plLoc3 = glGetUniformLocation(shader.getProgramIndex(), "pointLights[3].position");
-	plLoc4 = glGetUniformLocation(shader.getProgramIndex(), "pointLights[4].position");
-	plLoc5 = glGetUniformLocation(shader.getProgramIndex(), "pointLights[5].position");
+
+	GLuint pointLightsUniformLoc = glGetUniformLocation(shader.getProgramIndex(), "l_pos");
+
+	for (int i = 0; i < 6; i++) {
+		std::string result = "l_pos[" + std::to_string(i) + "]";
+		const GLchar* glString = result.c_str();
+		lPos_uniformId[i] = glGetUniformLocation(shader.getProgramIndex(), glString);
+	}
+
 	tex_loc = glGetUniformLocation(shader.getProgramIndex(), "texmap");
 	tex_loc1 = glGetUniformLocation(shader.getProgramIndex(), "texmap1");
 	tex_loc2 = glGetUniformLocation(shader.getProgramIndex(), "texmap2");
