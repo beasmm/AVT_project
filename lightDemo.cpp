@@ -338,6 +338,12 @@ void fishCollision(AABB boatAABB, AABB fishAABB) {
 	if (isColliding(boatAABB, fishAABB)) {
 		boat.position[0] = 0.0;
 		boat.position[2] = 0.0;
+		boat.speed = 0.0;
+		cams[2].camPos[0] = 20 * sin(alpha * 3.14f / 180.0f) * cos(beta * 3.14f / 180.0f);
+		cams[2].camPos[1] = 20 * sin(beta * 3.14f / 180.0f);
+		cams[2].camPos[2] = 20 * cos(alpha * 3.14f / 180.0f) * cos(beta * 3.14f / 180.0f);
+		cams[2].camTarget[0] = 0.0;
+		cams[2].camTarget[1] = 0.0;
 	}
 }
 
