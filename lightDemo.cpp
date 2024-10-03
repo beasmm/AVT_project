@@ -82,6 +82,106 @@ GLint lPos_uniformId;
 GLint plLoc0, plLoc1, plLoc2, plLoc3, plLoc4, plLoc5;
 GLint tex_loc, tex_loc1, tex_loc2;
 	
+//////////////////////////////////////////////////////////////////////////
+//collision variables, matrix calcs, OBB into AABB and collision detection.
+//variables
+class AABB {
+public:
+	std::vector<float> min = { 0.0f, 0.0f, 0.0f };
+	std::vector<float> max = { 0.0f, 0.0f, 0.0f };
+};
+
+class OBB {
+public:
+	std::vector<float> center = { 0.0f, 0.0f, 0.0f };
+	std::vector<float> halfSize = { 0.0f, 0.0f, 0.0f };
+	std::vector<std::vector<float>> orientation = { {1.0f, 0.0f, 0.0f},
+												   {0.0f, 1.0f, 0.0f},
+												   {0.0f, 0.0f, 1.0f} };
+};
+
+//matrix calcs
+std::vector<float> subtract(std::vector<float> v1, std::vector<float> v2) {
+	return { v1[0] - v2[0], v1[1] - v2[1], v1[2] - v2[2] };
+}
+
+float dotProduct(std::vector<float> v1, std::vector<float> v2) {
+	return v1[0] * v2[0] + v1[1] * v2[1] + v1[2] * v2[2];
+}
+
+std::vector<float> matrixVectorMultiply(std::vector<std::vector<float>> matrix, std::vector<float> vec) {
+	return {
+		matrix[0][0] * vec[0] + matrix[0][1] * vec[1] + matrix[0][2] * vec[2],
+		matrix[1][0] * vec[0] + matrix[1][1] * vec[1] + matrix[1][2] * vec[2],
+		matrix[2][0] * vec[0] + matrix[2][1] * vec[1] + matrix[2][2] * vec[2]
+	};
+}
+
+void normalize(std::vector<float>& vec) {
+	float length = std::sqrt(vec[0] * vec[0] + vec[1] * vec[1] + vec[2] * vec[2]);
+	if (length > 0.0f) {
+		vec[0] /= length;
+		vec[1] /= length;
+		vec[2] /= length;
+	}
+}
+
+float projectAABB(AABB aabb, std::vector<float> axis) {
+	std::vector<float> extent = subtract(aabb.max, aabb.min);
+	extent[0] *= 0.5f; extent[1] *= 0.5f; extent[2] *= 0.5f;
+	return std::fabs(extent[0] * axis[0]) +
+		std::fabs(extent[1] * axis[1]) +
+		std::fabs(extent[2] * axis[2]);
+}
+
+float projectOBB(OBB obb, std::vector<float> axis) {
+	std::vector<float> extent = obb.halfSize;
+	return std::fabs(extent[0] * dotProduct(obb.orientation[0], axis)) +
+		std::fabs(extent[1] * dotProduct(obb.orientation[1], axis)) +
+		std::fabs(extent[2] * dotProduct(obb.orientation[2], axis));
+}
+
+// calculate the AABB from OBB
+AABB calculateAABBFromOBB(OBB obb) {
+	AABB aabb;
+
+	aabb.min = { std::numeric_limits<float>::max(), std::numeric_limits<float>::max(), std::numeric_limits<float>::max() };
+	aabb.max = { std::numeric_limits<float>::lowest(), std::numeric_limits<float>::lowest(), std::numeric_limits<float>::lowest() };
+
+	std::vector<std::vector<float>> corners(8);
+	for (int x = -1; x <= 1; x += 2) {
+		for (int y = -1; y <= 1; y += 2) {
+			for (int z = -1; z <= 1; z += 2) {
+				corners[(x + 1) / 2 * 4 + (y + 1) / 2 * 2 + (z + 1) / 2] = {
+					obb.center[0] + x * obb.halfSize[0] * obb.orientation[0][0] + y * obb.halfSize[1] * obb.orientation[1][0] + z * obb.halfSize[2] * obb.orientation[2][0],
+					obb.center[1] + x * obb.halfSize[0] * obb.orientation[0][1] + y * obb.halfSize[1] * obb.orientation[1][1] + z * obb.halfSize[2] * obb.orientation[2][1],
+					obb.center[2] + x * obb.halfSize[0] * obb.orientation[0][2] + y * obb.halfSize[1] * obb.orientation[1][2] + z * obb.halfSize[2] * obb.orientation[2][2]
+				};
+			}
+		}
+	}
+
+	for (const auto& corner : corners) {
+		aabb.min[0] = std::min(aabb.min[0], corner[0]);
+		aabb.min[1] = std::min(aabb.min[1], corner[1]);
+		aabb.min[2] = std::min(aabb.min[2], corner[2]);
+
+		aabb.max[0] = std::max(aabb.max[0], corner[0]);
+		aabb.max[1] = std::max(aabb.max[1], corner[1]);
+		aabb.max[2] = std::max(aabb.max[2], corner[2]);
+	}
+
+	return aabb;
+}
+
+//COLLISION
+bool isColliding(const AABB& a, const AABB& b) {
+	return (a.min[0] <= b.max[0] && a.max[0] >= b.min[0]) &&
+		(a.min[1] <= b.max[1] && a.max[1] >= b.min[1]) &&
+		(a.min[2] <= b.max[2] && a.max[2] >= b.min[2]);
+}
+//////////////////////////////////////////////////////////////////////////
+
 class Camera{
 public:
 	float camPos[3] = {0.01f, 20.0f, 0.0f};
@@ -102,6 +202,7 @@ public:
 	bool left_paddle_working = false;
 	bool right_paddle_working = false;
 	int paddle_angle = 0;
+	OBB boatOBB;
 };
 
 Boat boat;
@@ -117,7 +218,25 @@ public:
 	float speed = 0;
 	float direction[3] = { 0.0f, 0.0f, 0.0f };
 	float position[3] = { 0.0f, 0.0f, 0.0f };
+	OBB fishOBB;
 };
+
+//create OBB for the fish
+OBB createOBB(float position[3], float halfSize[3]) {
+	OBB OBB;
+
+	std::copy(position, position + 3, OBB.center.begin());
+
+	OBB.halfSize = { 0.5f, 0.25f, 0.15f }; // Unsure how to calculate
+
+	OBB.orientation = {
+		{1.0f, 0.0f, 0.0f},  // X-axis
+		{0.0f, 1.0f, 0.0f},  // Y-axis
+		{0.0f, 0.0f, 1.0f}   // Z-axis
+	};
+
+	return OBB;
+}
 
 vector<class Fish> fishList;
 
@@ -208,8 +327,17 @@ void spawnFish(float boatPos[3]) {
 		newFish.direction[0] = static_cast<float>(rand()) / (static_cast<float>(RAND_MAX)) * 2.0f - 1.0f;
 		newFish.direction[2] = static_cast<float>(rand()) / (static_cast<float>(RAND_MAX)) * 2.0f - 1.0f;
 		newFish.direction[1] = 0.0f;  // doesnt move on the third axis
+
+		newFish.fishOBB = createOBB(newFish.position, newFish.position);
 		normalize(newFish.direction);
 		fishList.push_back(newFish);
+	}
+}
+
+void fishCollision(AABB boatAABB, AABB fishAABB) {
+	if (isColliding(boatAABB, fishAABB)) {
+		boat.position[0] = 0.0;
+		boat.position[2] = 0.0;
 	}
 }
 
@@ -218,6 +346,8 @@ void spawnFish(float boatPos[3]) {
 // Update function
 //
 void updateFish(float boatPos[3]) {
+
+	AABB boatAABB = calculateAABBFromOBB(boat.boatOBB);
 	// Spawn fish if necessary
 	while (fishList.size() < maxFish) {
 		spawnFish(boatPos);
@@ -229,8 +359,12 @@ void updateFish(float boatPos[3]) {
 	// Update fish positions (this can be more complex if you want to simulate swimming)
 	for (auto& fish : fishList) {
 		// Example of simple fish movement
+		AABB fishAABB = calculateAABBFromOBB(fish.fishOBB);
+		fishCollision(boatAABB, fishAABB);
 		fish.position[0] += fish.direction[0]*fish.speed;
+		fish.fishOBB.center[0] = fish.position[0];
 		fish.position[2] += fish.direction[1]*fish.speed;
+		fish.fishOBB.center[2] = fish.position[2];
 
 
 	}
@@ -254,6 +388,7 @@ void refresh(int value)
 	float angle_rad = boat.angle * (3.14 / 180.0f);
 	boat.position[0] += boat.speed * sin(angle_rad) * deltaT;
 	boat.position[2] += boat.speed * cos(angle_rad) * deltaT;
+	boat.boatOBB = createOBB(boat.position, boat.position);
 
 	updateFish(boat.position);
 
