@@ -78,7 +78,7 @@ extern float mNormal3x3[9];
 GLint pvm_uniformId;
 GLint vm_uniformId;
 GLint normal_uniformId;
-GLint lPos_uniformId[9];
+GLint lPos_uniformId[8];
 GLint lightEnabledId;
 
 GLint tex_loc, tex_loc1, tex_loc2;
@@ -288,7 +288,9 @@ float lightPos[4] = {4.0f, 6.0f, 2.0f, 1.0f};
 void setupPointLightPos() {
 	for (int i = 0; i < 6; i++) {
 		pointLightPos[i][0] = buoy_positions[i][0];
-		pointLightPos[i][1] = buoy_positions[i][1];
+		pointLightPos[i][1] = 0.71f;
+		pointLightPos[i][2] = buoy_positions[i][1];
+		pointLightPos[i][3] = 1.0f;
 	}
 }
 
@@ -574,13 +576,12 @@ void renderScene(void) {
 	//send the point light positions
 	for (int i = 0; i < 6; i++) {
 		multMatrixPoint(VIEW, pointLightPos[i], res);
-		glUniform4fv(lPos_uniformId[1 + i], 1, res);
+		glUniform4fv(lPos_uniformId[i], 1, res);
 	}
-
 
 	for (int i = 0; i < 2; i++) {
 		multMatrixPoint(VIEW, spotLightPos[i], res);
-		glUniform4fv(lPos_uniformId[7 + i], 1, res);
+		glUniform4fv(lPos_uniformId[6 + i], 1, res);
 	}
 
 	loc = glGetUniformLocation(shader.getProgramIndex(), "coneDir");
@@ -912,8 +913,8 @@ GLuint setupShaders() {
 
 	// Shader for models
 	shader.init();
-	shader.loadShader(VSShaderLib::VERTEX_SHADER, "shaders/pointlight_gouraud.vert");
-	shader.loadShader(VSShaderLib::FRAGMENT_SHADER, "shaders/pointlight_gouraud.frag");
+	shader.loadShader(VSShaderLib::VERTEX_SHADER, "shaders/pointlight_phong.vert");
+	shader.loadShader(VSShaderLib::FRAGMENT_SHADER, "shaders/pointlight_phong.frag");
 
 	// set semantics for the shader variables
 	glBindFragDataLocation(shader.getProgramIndex(), 0,"colorOut");
@@ -933,28 +934,21 @@ GLuint setupShaders() {
 	pvm_uniformId = glGetUniformLocation(shader.getProgramIndex(), "m_pvm");
 	vm_uniformId = glGetUniformLocation(shader.getProgramIndex(), "m_viewModel");
 	normal_uniformId = glGetUniformLocation(shader.getProgramIndex(), "m_normal");
-	lightEnabledId = glGetUniformLocation(shader.getProgramIndex(), "pointLighsOn");
 	glUniform1d(lightEnabledId, 1);
-
-	glUniform3fv(glGetUniformLocation(shader.getProgramIndex(), "dirLight.direction"), 1, dirLight.direction);
-	glUniform3fv(glGetUniformLocation(shader.getProgramIndex(), "dirLight.ambient"), 1, dirLight.ambient);
-	glUniform3fv(glGetUniformLocation(shader.getProgramIndex(), "dirLight.diffuse"), 1, dirLight.diffuse);
-	glUniform3fv(glGetUniformLocation(shader.getProgramIndex(), "dirLight.specular"), 1,dirLight.specular);
-	
 	
 
 	GLint LightsUniformLoc = glGetUniformLocation(shader.getProgramIndex(), "point_pos");
 	for (int i = 0; i < 6; i++) {
 		std::string result = "point_pos[" + std::to_string(i) + "]";
 		const GLchar* glString = result.c_str();
-		lPos_uniformId[1 + i] = glGetUniformLocation(shader.getProgramIndex(), glString);
+		lPos_uniformId[i] = glGetUniformLocation(shader.getProgramIndex(), glString);
 	}
 
 	LightsUniformLoc = glGetUniformLocation(shader.getProgramIndex(), "spot_pos");
 	for (int i = 0; i < 2; i++) {
 		std::string result = "spot_pos[" + std::to_string(i) + "]";
 		const GLchar* glString = result.c_str();
-		lPos_uniformId[7 + i] = glGetUniformLocation(shader.getProgramIndex(), glString);
+		lPos_uniformId[6 + i] = glGetUniformLocation(shader.getProgramIndex(), glString);
 	}
   
 	tex_loc = glGetUniformLocation(shader.getProgramIndex(), "texmap");
