@@ -540,32 +540,3 @@ void	ComputeTangentArray(int vertexCount, float *vertex, float *normal, float *t
 		//printf("tangent vector [%.2f, %.2f, %.2f, %.2f]\n", tangent[i * 4], tangent[i * 4 + 1], tangent[i * 4 + 2], tangent[i * 4 + 3]);
 	}
 }
-
-
-//ANIMATION!!
-
-/*
-class boat
-{
-	float speed;
-	float direction[3];
-	floa position[3];
-	}
-
-float deltaT = 0.05;
-float decay = 0.01,
-
-timer() {
-BOAT.position += BOAT.speed * BOAT.direction * deltaT;
-if(b.speed > 0)
-BOAT.speed -= decay * BOAT.speed;
-}
-
-case 'a' :
-	speed += 0.1;
-	rotate(direction, 1);
-
-case 'd' :
-	speed -= 0.1;
-	rotate(direction, -1);
-*/

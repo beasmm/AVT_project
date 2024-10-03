@@ -8,7 +8,7 @@
 // The code comes with no warranties, use it at your own risk.
 // You may use it, or parts of it, wherever you want.
 // 
-// Author: João Madeiras Pereira
+// Author: JoÃ£o Madeiras Pereira
 //
 #include <cmath> // For cos and sin
 #include <math.h>
@@ -99,6 +99,9 @@ public:
 	int paddle_direction = 1;
 	float direction[3] = { 0.0f, 0.0f, 0.0f };
 	float position[3] = { 0.0f, 0.0f, 0.0f };
+	bool left_paddle_working = false;
+	bool right_paddle_working = false;
+	int paddle_angle = 0;
 };
 
 Boat boat;
@@ -137,7 +140,7 @@ int startX, startY, tracking = 0;
 
 // Camera Spherical Coordinates
 float alpha = 39.0f, beta = 51.0f;
-float r = 10.0f;
+float r = 20.0f;
 
 // Frame counting and FPS computation
 long myTime,timebase = 0,frame = 0;
@@ -174,7 +177,7 @@ void despawnFish(float boatPos[3]) {
 		float distance = sqrt(dx * dx + dz * dz);
 
 		if (distance > maxDistance) {
-			fishList.erase(fishList.begin() + i);//«remove it
+			fishList.erase(fishList.begin() + i);//Â«remove it
 		}
 	}
 }
@@ -235,6 +238,19 @@ void updateFish(float boatPos[3]) {
 
 void refresh(int value)
 {
+	if (boat.left_paddle_working || boat.right_paddle_working) {
+		if (boat.speed <= 1 && boat.paddle_direction == 1)
+			boat.speed += 0.1 * boat.paddle_strength;
+		else if (boat.speed >= -1)
+			boat.speed -= 0.1 * boat.paddle_strength;
+
+		if (boat.left_paddle_working && !boat.right_paddle_working)
+			boat.angle += 2;
+		else if (!boat.left_paddle_working && boat.right_paddle_working)
+			boat.angle -= 2;
+		boat.paddle_angle += 2 * boat.paddle_strength;
+	}
+
 	float angle_rad = boat.angle * (3.14 / 180.0f);
 	boat.position[0] += boat.speed * sin(angle_rad) * deltaT;
 	boat.position[2] += boat.speed * cos(angle_rad) * deltaT;
@@ -244,9 +260,11 @@ void refresh(int value)
 	if (boat.speed > 0) boat.speed -= speed_decay;
 	else if (boat.speed < 0) boat.speed += speed_decay;
 
-	cams[2].camPos[0] = boat.position[0];
-	cams[2].camPos[1] = 10.0f;
-	cams[2].camPos[2] = boat.position[2] - 10.0f;
+	if (boat.speed != 0) {
+		cams[2].camPos[0] += boat.speed * sin(angle_rad) * deltaT;
+		cams[2].camPos[2] += boat.speed * cos(angle_rad) * deltaT;
+	}
+
 
 	cams[2].camTarget[0] = boat.position[0];
 	cams[2].camTarget[1] = 0.0f;
@@ -374,7 +392,7 @@ void renderScene(void) {
 	int objId=0; //id of the object mesh - to be used as index of mesh: Mymeshes[objID] means the current mesh
 
 	int buoy = 0;
-	for (int i = 0 ; i < 14; ++i) {
+	for (int i = 0 ; i < 19; ++i) {
 
 		// send the material
 		loc = glGetUniformLocation(shader.getProgramIndex(), "mat.ambient");
@@ -392,10 +410,10 @@ void renderScene(void) {
 		if (i == 1) translate(MODEL, -10.0f, 0.01f, 0.0f);
 
 		// fix house base offset
-		if (i == 2) translate(MODEL, -12.5f, 0.0f, -0.5f);
+		if (i == 2) translate(MODEL, -12.5f, 0.5f, -0.5f);
 
-		if (i == 3) {
-			translate(MODEL, -12.0f, 1.0f, 0.0f);
+		if (i == 3) { //house roof
+			translate(MODEL, -12.5f, 1.0f, -0.5f);
 			rotate(MODEL, 45, 0, 1, 0);
 		}
 
@@ -403,14 +421,67 @@ void renderScene(void) {
 
 		if (i == 5 || i == 6) translate(MODEL, -9.0f, 0.25f, 2.0f); // tree
 
-		if (i == 7) { // boat
-			translate(MODEL, boat.position[0], 0, boat.position[2]);
+		if (i == 7) { // boat base
+			translate(MODEL, boat.position[0], 0.1, boat.position[2]);
 			rotate(MODEL, boat.angle, 0, 1, 0);
-			scale(MODEL, 0.4f, 0.2f, 1.0f);
-			//OLA teste test test
+			scale(MODEL, 0.4f, 0.2f, 0.7f);
+		}
+		if (i == 8) { // boat front
+			translate(MODEL, boat.position[0], 0.1, boat.position[2]);
+			rotate(MODEL, boat.angle, 0, 1, 0);
+			translate(MODEL, 0.0f, 0.0f, 0.35f);
+			rotate(MODEL, 90, 1, 0, 0);
+			scale(MODEL, 1, 1, 0.5);
+			rotate(MODEL, 45, 0, 1, 0);
+		}
+		if (i == 10) { // left row handle
+			translate(MODEL, boat.position[0], 0.15f, boat.position[2]);
+			rotate(MODEL, boat.angle, 0, 1, 0);
+			if (boat.left_paddle_working && boat.paddle_direction == 1)	
+				rotate(MODEL, boat.paddle_angle, 1, 0, 0);
+			else if (boat.left_paddle_working && boat.paddle_direction == 0)
+				rotate(MODEL, -boat.paddle_angle, 1, 0, 0);
+			translate(MODEL, -0.3f, 0.0f, 0.0f);
+			rotate(MODEL, -45, 0, 0, 1);
+		}
+		if (i == 9 ) { // right row handle
+			translate(MODEL, boat.position[0], 0.15f, boat.position[2]);
+			rotate(MODEL, boat.angle, 0, 1, 0);
+			if (boat.right_paddle_working && boat.paddle_direction == 1)
+				rotate(MODEL, boat.paddle_angle, 1, 0, 0);
+			else if (boat.right_paddle_working && boat.paddle_direction == 0)
+				rotate(MODEL, -boat.paddle_angle, 1, 0, 0);
+			translate(MODEL, 0.3f, 0.0f, 0.0f);
+			rotate(MODEL, 45, 0, 0, 1);
+		}
+		if (i == 11) { //left row paddle
+			translate(MODEL, boat.position[0], 0.0f, boat.position[2]);
+			rotate(MODEL, boat.angle, 0, 1, 0);
+			translate(MODEL, 0.0f, 0.15f, 0.0f);
+			if (boat.left_paddle_working && boat.paddle_direction == 1)
+				rotate(MODEL,boat.paddle_angle, 1, 0, 0);
+			else if (boat.left_paddle_working && boat.paddle_direction == 0)
+				rotate(MODEL, -boat.paddle_angle, 1, 0, 0);
+			rotate(MODEL, 180, 1, 0, 0);
+			translate(MODEL, -0.4f, 0.15f, 0.0f);
+			rotate(MODEL, 45, 0, 0, 1);
+			scale(MODEL, 0.1f, 0.15f, 0.05f);
+		}
+		if (i == 12) { //right3 row paddle
+			translate(MODEL, boat.position[0], 0.0f, boat.position[2]);
+			rotate(MODEL, boat.angle, 0, 1, 0);
+			translate(MODEL, 0.0f, 0.15f, 0.0f);
+			if (boat.right_paddle_working && boat.paddle_direction == 1)
+				rotate(MODEL, boat.paddle_angle, 1, 0, 0);
+			else if (boat.right_paddle_working && boat.paddle_direction == 0)
+				rotate(MODEL, -boat.paddle_angle, 1, 0, 0);
+			rotate(MODEL, 180, 1, 0, 0);
+			translate(MODEL, 0.4f, 0.15f, 0.0f);
+			rotate(MODEL, -45, 0, 0, 1);
+			scale(MODEL, 0.1f, 0.15f, 0.05f);
 		}
 		
-		if (i > 7) {
+		if (i > 12) {
 			translate(MODEL, buoy_positions[buoy][0], 0.0f, buoy_positions[buoy][1]);
 			buoy++;
 		}
@@ -486,18 +557,10 @@ void processKeys(unsigned char key, int xx, int yy)
 		case '3': active = 2; break;
 
 		case 'a':
-			if (boat.speed <= 1 && boat.paddle_direction == 1) 
-				boat.speed += 0.1 * boat.paddle_strength;
-			else if (boat.speed >= -1)
-				boat.speed -= 0.1 * boat.paddle_strength;
-			boat.angle += 5;
+			boat.left_paddle_working = true;
 			break;
 		case 'd':
-			if (boat.speed <= 1 && boat.paddle_direction == 1) 
-				boat.speed += 0.1 * boat.paddle_strength;
-			else if (boat.speed >= -1)
-				boat.speed -= 0.1 * boat.paddle_strength;
-			boat.angle -= 5;
+			boat.right_paddle_working = true;
 			break;
 		case 's':
 			if (boat.paddle_direction == 1) boat.paddle_direction = 0;
@@ -522,6 +585,16 @@ void processKeys(unsigned char key, int xx, int yy)
 	}
 }
 
+void processKeysUp(unsigned char key, int xx, int yy) {
+	switch (key) {
+		case 'a':
+			boat.left_paddle_working = false;
+			break;
+		case 'd':
+			boat.right_paddle_working = false;
+			break;
+	}
+}
 
 // ------------------------------------------------------------
 //
@@ -591,9 +664,9 @@ void processMouseMotion(int xx, int yy)
 			rAux = 0.1f;
 	}
 
-	cams[2].camPos[0] = rAux * sin(alphaAux * 3.14f / 180.0f) * cos(betaAux * 3.14f / 180.0f);
-	cams[2].camPos[2] = rAux * cos(alphaAux * 3.14f / 180.0f) * cos(betaAux * 3.14f / 180.0f);
-	cams[2].camPos[1] = rAux *   						       sin(betaAux * 3.14f / 180.0f);
+	cams[2].camPos[0] = boat.position[0] + rAux * sin(alphaAux * 3.14f / 180.0f) * cos(betaAux * 3.14f / 180.0f);
+	cams[2].camPos[2] = boat.position[2] + rAux * cos(alphaAux * 3.14f / 180.0f) * cos(betaAux * 3.14f / 180.0f);
+	cams[2].camPos[1] = rAux * sin(betaAux * 3.14f / 180.0f);
 
 //  uncomment this if not using an idle or refresh func
 //	glutPostRedisplay();
@@ -709,9 +782,9 @@ void init()
 
 	float angle_rad = boat.angle * (3.14 / 180.0f);
 
-	cams[2].camPos[0] = (-cos(angle_rad) * boat.speed * 5.0f);
-	cams[2].camPos[1] = 20.0f;
-	cams[2].camPos[2] = (-sin(angle_rad) * boat.speed * 5.0f);
+	cams[2].camPos[0] = r * sin(alpha * 3.14f / 180.0f) * cos(beta * 3.14f / 180.0f);
+	cams[2].camPos[1] = r * sin(beta * 3.14f / 180.0f);
+	cams[2].camPos[2] = r * cos(alpha * 3.14f / 180.0f) * cos(beta * 3.14f / 180.0f);
 
 
 	// create geometry and VAO of the grass plane
@@ -821,7 +894,6 @@ void init()
 	amesh.mat.texCount = texcount;
 	myMeshes.push_back(amesh);
 
-	
 	// create geometry and VAO for fish blue
 	float ambFishB[] = { 0.1f, 0.1f, 0.2f, 1.0f }; 
 	float diffFishB[] = { 0.2f, 0.2f, 0.5f, 1.0f };  
@@ -871,6 +943,7 @@ void init()
 	
 
 	// create geometry and VAO of the sleigh
+	// create geometry and VAO of the boat
 	amesh = createCube();
 	memcpy(amesh.mat.ambient, amb3, 4 * sizeof(float));
 	memcpy(amesh.mat.diffuse, diff3, 4 * sizeof(float));
@@ -878,6 +951,37 @@ void init()
 	memcpy(amesh.mat.emissive, emissive, 4 * sizeof(float));
 	amesh.mat.shininess = shininess;
 	amesh.mat.texCount = texcount;
+	myMeshes.push_back(amesh);
+
+
+	amesh = createCone(0.2, 0.3, 4); // front of the boat
+	memcpy(amesh.mat.ambient, amb3, 4 * sizeof(float));
+	memcpy(amesh.mat.diffuse, diff3, 4 * sizeof(float));
+	memcpy(amesh.mat.specular, spec3, 4 * sizeof(float));
+	memcpy(amesh.mat.emissive, emissive, 4 * sizeof(float));
+	amesh.mat.shininess = shininess;
+	amesh.mat.texCount = texcount;
+	myMeshes.push_back(amesh);
+
+	// create rows
+	amesh = createCylinder(0.4, 0.03, 4);
+	memcpy(amesh.mat.ambient, amb3, 4 * sizeof(float));
+	memcpy(amesh.mat.diffuse, diff3, 4 * sizeof(float));
+	memcpy(amesh.mat.specular, spec3, 4 * sizeof(float));
+	memcpy(amesh.mat.emissive, emissive, 4 * sizeof(float));
+	amesh.mat.shininess = shininess;
+	amesh.mat.texCount = texcount;
+	myMeshes.push_back(amesh);
+	myMeshes.push_back(amesh);
+
+	amesh = createCube();
+	memcpy(amesh.mat.ambient, amb3, 4 * sizeof(float));
+	memcpy(amesh.mat.diffuse, diff3, 4 * sizeof(float));
+	memcpy(amesh.mat.specular, spec3, 4 * sizeof(float));
+	memcpy(amesh.mat.emissive, emissive, 4 * sizeof(float));
+	amesh.mat.shininess = shininess;
+	amesh.mat.texCount = texcount;
+	myMeshes.push_back(amesh);
 	myMeshes.push_back(amesh);
 
 	// create buoys
@@ -937,6 +1041,7 @@ int main(int argc, char **argv) {
 
 //	Mouse and Keyboard Callbacks
 	glutKeyboardFunc(processKeys);
+	glutKeyboardUpFunc(processKeysUp);
 	glutMouseFunc(processMouseButtons);
 	glutMotionFunc(processMouseMotion);
 	glutMouseWheelFunc ( mouseWheel ) ;
