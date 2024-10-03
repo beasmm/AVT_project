@@ -82,10 +82,7 @@ GLint lPos_uniformId[8];
 GLint lightEnabledId;
 
 GLint tex_loc, tex_loc1, tex_loc2;
-	
-//////////////////////////////////////////////////////////////////////////
-//collision variables, matrix calcs, OBB into AABB and collision detection.
-//variables
+
 class AABB {
 public:
 	std::vector<float> min = { 0.0f, 0.0f, 0.0f };
@@ -100,6 +97,97 @@ public:
 												   {0.0f, 1.0f, 0.0f},
 												   {0.0f, 0.0f, 1.0f} };
 };
+
+class Camera {
+public:
+	float camPos[3] = { 0.01f, 20.0f, 0.0f };
+	float camTarget[3] = { 0.0f, 0.0f, 0.0f };
+	int type = 0;
+};
+
+Camera cams[3];
+
+class Boat {
+public:
+	float speed = 0;
+	float angle = 0;
+	int paddle_strength = 1;
+	int paddle_direction = 1;
+	float direction[3] = { 0.0f, 0.0f, 0.0f };
+	float position[3] = { 0.0f, 0.0f, 0.0f };
+	bool left_paddle_working = false;
+	bool right_paddle_working = false;
+	int paddle_angle = 0;
+	OBB boatOBB;
+};
+
+Boat boat;
+
+const int maxFish = 10; //Numero Maximo de Peixes
+const float maxDistance = 20.0f; //Distancia a que podem tar do barco
+
+float deltaT = 0.05;
+float speed_decay = 0.01;
+
+class Fish {
+public:
+	float speed = 0;
+	float direction[3] = { 0.0f, 0.0f, 0.0f };
+	float position[3] = { 0.0f, 0.0f, 0.0f };
+	OBB fishOBB;
+};
+
+
+vector<class Fish> fishList;
+
+float buoy_positions[6][2] = {
+	{10.0f, 7.0f},
+	{-12.0f, 7.0f},
+	{16.5f, -4.5f},
+	{0.0f, -17.0f},
+	{-16.5f, -4.5f },
+	{0.0f, 17.0f}
+};
+
+// lights
+float directionalLightDir[4] = { 1.0f, 1.0f, 1.0f, 0.0f };
+float pointLightPos[6][4];
+float spotLightPos[2][4] = {
+	{-0.1f, 0.2f, 0.8f, 1.0f },
+	{ 0.1f, 0.2f, 0.8f, 1.0f }
+};
+
+struct DirectionalLight {
+	float direction[3] = { -0.2f, -1.0f, -0.3f };
+	float ambient[3] = { 0.3f, 0.3f, 0.3f };
+	float diffuse[3] = { 0.8f, 0.8f, 0.8f };
+	float specular[3] = { 1.0f, 1.0f, 1.0f };
+};
+
+DirectionalLight dirLight;
+
+bool isDay = true;
+bool pointLightsOn = false;
+bool spotLightsOn = false;
+float coneDir[4] = { 0.0f, 0.0f, 1.0f, 0.0f };
+
+
+// Mouse Tracking Variables
+int startX, startY, tracking = 0;
+
+// Camera Spherical Coordinates
+float alpha = 39.0f, beta = 51.0f;
+float r = 20.0f;
+
+// Frame counting and FPS computation
+long myTime, timebase = 0, frame = 0;
+char s[32];
+float lightPos[4] = { 4.0f, 6.0f, 2.0f, 1.0f };
+	
+//////////////////////////////////////////////////////////////////////////
+//collision variables, matrix calcs, OBB into AABB and collision detection.
+//variables
+
 
 //matrix calcs
 std::vector<float> subtract(std::vector<float> v1, std::vector<float> v2) {
@@ -181,46 +269,32 @@ bool isColliding(const AABB& a, const AABB& b) {
 		(a.min[1] <= b.max[1] && a.max[1] >= b.min[1]) &&
 		(a.min[2] <= b.max[2] && a.max[2] >= b.min[2]);
 }
+
+bool isCollidingWithBuoy(const AABB& a, int buoy) {
+	for (int i = 0; i < 6; i++) {
+		return(a.min[0] <= buoy_positions[buoy][0] + 0.15f && a.max[0] >= buoy_positions[buoy][0] - 0.15f &&
+			a.min[2] <= buoy_positions[buoy][1] + 0.15f && a.max[2] >= buoy_positions[buoy][1] - 0.15f);
+	}
+}
+
+bool isCollidingWithIsland(const AABB& a) {
+	return (a.min[0] <= -10.0f + 5.0f && a.max[0] >= -10.0f - 5.0f &&
+		a.min[2] <= 5.0f && a.max[2] >= -5.0f);
+}
+
+void resetBoat() {
+	boat.position[0] = 0.0;
+	boat.position[2] = 0.0;
+	boat.speed = 0.0;
+	cams[2].camPos[0] = 20 * sin(alpha * 3.14f / 180.0f) * cos(beta * 3.14f / 180.0f);
+	cams[2].camPos[1] = 20 * sin(beta * 3.14f / 180.0f);
+	cams[2].camPos[2] = 20 * cos(alpha * 3.14f / 180.0f) * cos(beta * 3.14f / 180.0f);
+	cams[2].camTarget[0] = 0.0;
+	cams[2].camTarget[1] = 0.0;
+}
 //////////////////////////////////////////////////////////////////////////
 
-class Camera{
-public:
-	float camPos[3] = {0.01f, 20.0f, 0.0f};
-	float camTarget[3] = { 0.0f, 0.0f, 0.0f };
-	int type = 0;
-};
 
-Camera cams[3];
-
-class Boat {
-public:
-	float speed = 0;
-	float angle = 0;
-	int paddle_strength = 1;
-	int paddle_direction = 1;
-	float direction[3] = { 0.0f, 0.0f, 0.0f };
-	float position[3] = { 0.0f, 0.0f, 0.0f };
-	bool left_paddle_working = false;
-	bool right_paddle_working = false;
-	int paddle_angle = 0;
-	OBB boatOBB;
-};
-
-Boat boat;
-
-const int maxFish = 10; //Numero Maximo de Peixes
-const float maxDistance = 20.0f; //Distancia a que podem tar do barco
-
-float deltaT = 0.05;
-float speed_decay = 0.01;
-
-class Fish {
-public:
-	float speed = 0;
-	float direction[3] = { 0.0f, 0.0f, 0.0f };
-	float position[3] = { 0.0f, 0.0f, 0.0f };
-	OBB fishOBB;
-};
 
 //create OBB for the fish
 OBB createOBB(float position[3], float halfSize[3]) {
@@ -239,51 +313,6 @@ OBB createOBB(float position[3], float halfSize[3]) {
 	return OBB;
 }
 
-vector<class Fish> fishList;
-
-float buoy_positions[6][2] = {
-	{10.0f, 7.0f},
-	{-12.0f, 7.0f},
-	{16.5f, -4.5f},
-	{0.0f, -17.0f},
-	{-16.5f, -4.5f },
-	{0.0f, 17.0f}
-};
-
-// lights
-float directionalLightDir[4] = { 1.0f, 1.0f, 1.0f, 0.0f };
-float pointLightPos[6][4];
-float spotLightPos[2][4] = {
-	{-0.1f, 0.2f, 0.8f, 1.0f },
-	{ 0.1f, 0.2f, 0.8f, 1.0f }
-};
-
-struct DirectionalLight {
-	float direction[3] = {-0.2f, -1.0f, -0.3f};
-	float ambient[3] = {0.3f, 0.3f, 0.3f};
-	float diffuse[3] = { 0.8f, 0.8f, 0.8f };
-	float specular[3] = { 1.0f, 1.0f, 1.0f };
-};
-
-DirectionalLight dirLight;
-
-bool isDay = true;
-bool pointLightsOn = false;
-bool spotLightsOn = false;
-float coneDir[4] = { 0.0f, 0.0f, 1.0f, 0.0f};
-
-
-// Mouse Tracking Variables
-int startX, startY, tracking = 0;
-
-// Camera Spherical Coordinates
-float alpha = 39.0f, beta = 51.0f;
-float r = 20.0f;
-
-// Frame counting and FPS computation
-long myTime,timebase = 0,frame = 0;
-char s[32];
-float lightPos[4] = {4.0f, 6.0f, 2.0f, 1.0f};
 
 void setupPointLightPos() {
 	for (int i = 0; i < 6; i++) {
@@ -357,14 +386,7 @@ void spawnFish(float boatPos[3]) {
 
 void fishCollision(AABB boatAABB, AABB fishAABB) {
 	if (isColliding(boatAABB, fishAABB)) {
-		boat.position[0] = 0.0;
-		boat.position[2] = 0.0;
-		boat.speed = 0.0;
-		cams[2].camPos[0] = 20 * sin(alpha * 3.14f / 180.0f) * cos(beta * 3.14f / 180.0f);
-		cams[2].camPos[1] = 20 * sin(beta * 3.14f / 180.0f);
-		cams[2].camPos[2] = 20 * cos(alpha * 3.14f / 180.0f) * cos(beta * 3.14f / 180.0f);
-		cams[2].camTarget[0] = 0.0;
-		cams[2].camTarget[1] = 0.0;
+		resetBoat();
 	}
 }
 
@@ -439,6 +461,19 @@ void refresh(int value)
 	cams[2].camTarget[0] = boat.position[0];
 	cams[2].camTarget[1] = 0.0f;
 	cams[2].camTarget[2] = boat.position[2];
+
+	AABB boatAABB = calculateAABBFromOBB(boat.boatOBB);
+	if (isCollidingWithIsland(boatAABB)) {
+		resetBoat();
+	}
+	else {
+		for (int i = 0; i < 6; i++) {
+			if (isCollidingWithBuoy(boatAABB, i)) {
+				resetBoat();
+			}
+		}
+	}
+
 	glutPostRedisplay();
 	glutTimerFunc(1000 / 60, refresh, 0);
 }
