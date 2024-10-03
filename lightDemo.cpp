@@ -8,13 +8,16 @@
 // The code comes with no warranties, use it at your own risk.
 // You may use it, or parts of it, wherever you want.
 // 
-// Author: Jo�o Madeiras Pereira
+// Author: João Madeiras Pereira
 //
-
+#include <cmath> // For cos and sin
 #include <math.h>
 #include <iostream>
 #include <sstream>
 #include <string>
+#include <random>
+#include <vector>
+#include <cstdlib>  // for random numbers
 
 // include GLEW to access OpenGL 3.3 functions
 #include <GL/glew.h>
@@ -57,6 +60,8 @@ const string font_name = "fonts/arial.ttf";
 
 //Vector with meshes
 vector<struct MyMesh> myMeshes;
+
+vector<struct MyMesh> fishMeshes;
 
 //active camera variable
 int active = 0;
@@ -101,8 +106,20 @@ public:
 
 Boat boat;
 
+const int maxFish = 10; //Numero Maximo de Peixes
+const float maxDistance = 20.0f; //Distancia a que podem tar do barco
+
 float deltaT = 0.05;
 float speed_decay = 0.01;
+
+class Fish {
+public:
+	float speed = 0;
+	float direction[3] = { 0.0f, 0.0f, 0.0f };
+	float position[3] = { 0.0f, 0.0f, 0.0f };
+};
+
+vector<class Fish> fishList;
 
 float buoy_positions[6][2] = {
 	{10.0f, 7.0f},
@@ -116,8 +133,6 @@ float buoy_positions[6][2] = {
 // lights
 float directionalLightPos[4] = { 1.0f, 1000.0f,1.0f, 0.0f };
 float pointLightPos[6][4] = { };
-
-
 
 
 // Mouse Tracking Variables
@@ -151,6 +166,76 @@ void timer(int value)
     glutTimerFunc(1000, timer, 0);
 }
 
+// ------------------------------------------------------------
+//
+// Despawn fish if away from boat
+//
+void despawnFish(float boatPos[3]) {
+	for (int i = fishList.size() - 1; i >= 0; i--) {
+		float dx = fishList[i].position[0] - boatPos[0];
+		float dz = fishList[i].position[2] - boatPos[2];
+		float distance = sqrt(dx * dx + dz * dz);
+
+		if (distance > maxDistance) {
+			fishList.erase(fishList.begin() + i);//«remove it
+		}
+	}
+}
+
+// ------------------------------------------------------------
+//
+// Spawn fish if there are less then maxFish
+//
+void spawnFish(float boatPos[3]) {
+
+	if (fishList.size() < maxFish) {
+		Fish newFish;
+
+		std::random_device rd;  // Obtain a random number from hardware
+		std::mt19937 gen(rd()); // Seed the generator
+
+		std::uniform_real_distribution<double> dis(0.0, 360.0); // Distribution in the range [0, 360)
+
+		// Generate a random angle
+		double random_angle = dis(gen);
+
+		newFish.position[0] = boat.position[0] + maxDistance * cos(random_angle);
+		newFish.position[2] = boat.position[2] + maxDistance * sin(random_angle);
+		newFish.position[1] = 0.0f; // doesnt move on the third axis
+
+		newFish.speed = 0.01f + static_cast<float>(rand()) / (static_cast<float>(RAND_MAX)) * 0.05f; // Random speed
+
+		newFish.direction[0] = static_cast<float>(rand()) / (static_cast<float>(RAND_MAX)) * 2.0f - 1.0f;
+		newFish.direction[2] = static_cast<float>(rand()) / (static_cast<float>(RAND_MAX)) * 2.0f - 1.0f;
+		newFish.direction[1] = 0.0f;  // doesnt move on the third axis
+		normalize(newFish.direction);
+		fishList.push_back(newFish);
+	}
+}
+
+// ------------------------------------------------------------
+//
+// Update function
+//
+void updateFish(float boatPos[3]) {
+	// Spawn fish if necessary
+	while (fishList.size() < maxFish) {
+		spawnFish(boatPos);
+	}
+
+	// Move the fish and despawn if too far from the boat
+	despawnFish(boatPos);
+
+	// Update fish positions (this can be more complex if you want to simulate swimming)
+	for (auto& fish : fishList) {
+		// Example of simple fish movement
+		fish.position[0] += fish.direction[0]*fish.speed;
+		fish.position[2] += fish.direction[1]*fish.speed;
+
+
+	}
+}
+
 void refresh(int value)
 {
 	if (boat.left_paddle_working || boat.right_paddle_working) {
@@ -169,6 +254,8 @@ void refresh(int value)
 	float angle_rad = boat.angle * (3.14 / 180.0f);
 	boat.position[0] += boat.speed * sin(angle_rad) * deltaT;
 	boat.position[2] += boat.speed * cos(angle_rad) * deltaT;
+
+	updateFish(boat.position);
 
 	if (boat.speed > 0) boat.speed -= speed_decay;
 	else if (boat.speed < 0) boat.speed += speed_decay;
@@ -205,6 +292,47 @@ void changeSize(int w, int h) {
 	perspective(53.13f, ratio, 0.1f, 1000.0f);
 }
 
+
+// Render the fish
+void renderFish() {
+	GLint loc;
+	int randomFish = rand() % 3;
+
+	while (fishList.size() < maxFish) {
+		spawnFish(boat.position);
+	}
+
+	for (int i = 0; i < fishList.size(); i++) {
+		// Send the material of the fish
+		loc = glGetUniformLocation(shader.getProgramIndex(), "mat.ambient");
+		glUniform4fv(loc, 1, fishMeshes[randomFish].mat.ambient);
+		loc = glGetUniformLocation(shader.getProgramIndex(), "mat.diffuse");
+		glUniform4fv(loc, 1, fishMeshes[randomFish].mat.diffuse);
+		loc = glGetUniformLocation(shader.getProgramIndex(), "mat.specular");
+		glUniform4fv(loc, 1, fishMeshes[randomFish].mat.specular);
+		loc = glGetUniformLocation(shader.getProgramIndex(), "mat.shininess");
+		glUniform1f(loc, fishMeshes[randomFish].mat.shininess);
+
+		// Set the fish position
+		pushMatrix(MODEL);
+		translate(MODEL, fishList[i].position[0], fishList[i].position[1], fishList[i].position[2]);
+		scale(MODEL, 0.2f, 0.2f, 0.2f); // Adjust size of fish if needed
+
+		// Send matrices to OpenGL
+		computeDerivedMatrix(PROJ_VIEW_MODEL);
+		glUniformMatrix4fv(vm_uniformId, 1, GL_FALSE, mCompMatrix[VIEW_MODEL]);
+		glUniformMatrix4fv(pvm_uniformId, 1, GL_FALSE, mCompMatrix[PROJ_VIEW_MODEL]);
+		computeNormalMatrix3x3();
+		glUniformMatrix3fv(normal_uniformId, 1, GL_FALSE, mNormal3x3);
+
+		// Render the fish mesh
+		glBindVertexArray(fishMeshes[randomFish].vao);
+		glDrawElements(fishMeshes[randomFish].type, fishMeshes[randomFish].numIndexes, GL_UNSIGNED_INT, 0);
+		glBindVertexArray(0);
+
+		popMatrix(MODEL);
+	}
+}
 
 // ------------------------------------------------------------
 //
@@ -376,6 +504,7 @@ void renderScene(void) {
 		objId++;
 		
 	}
+	renderFish();
 
 	//Render text (bitmap fonts) in screen coordinates. So use ortoghonal projection with viewport coordinates.
 	glDisable(GL_DEPTH_TEST);
@@ -510,6 +639,7 @@ void processMouseMotion(int xx, int yy)
 
 	deltaX =  - xx + startX;
 	deltaY =    yy - startY;
+	alphaAux = 0;
 
 	// left mouse button: move camera
 	if (tracking == 1) {
@@ -764,6 +894,55 @@ void init()
 	amesh.mat.texCount = texcount;
 	myMeshes.push_back(amesh);
 
+	// create geometry and VAO for fish blue
+	float ambFishB[] = { 0.1f, 0.1f, 0.2f, 1.0f }; 
+	float diffFishB[] = { 0.2f, 0.2f, 0.5f, 1.0f };  
+	float specFishB[] = { 0.3f, 0.3f, 0.6f, 1.0f };  
+	float emissiveFishB[] = { 0.0f, 0.0f, 0.0f, 1.0f }; 
+	////////////////////////////////////////////////////
+	float ambFishG[] = { 0.1f, 0.2f, 0.1f, 1.0f };  
+	float diffFishG[] = { 0.2f, 0.4f, 0.2f, 1.0f };  
+	float specFishG[] = { 0.3f, 0.6f, 0.3f, 1.0f };  
+	float emissiveFishG[] = { 0.0f, 0.0f, 0.0f, 1.0f };  
+	////////////////////////////////////////////////////	
+	float ambFishR[] = { 0.2f, 0.1f, 0.1f, 1.0f };
+	float diffFishR[] = { 0.5f, 0.2f, 0.2f, 1.0f };  
+	float specFishR[] = { 0.6f, 0.3f, 0.3f, 1.0f }; 
+	float emissiveFishR[] = { 0.0f, 0.0f, 0.0f, 1.0f };  
+	shininess = 10.0f;
+
+	
+	amesh = createCube();
+	memcpy(amesh.mat.ambient, ambFishB, 4 * sizeof(float));
+	memcpy(amesh.mat.diffuse, diffFishB, 4 * sizeof(float));
+	memcpy(amesh.mat.specular, specFishB, 4 * sizeof(float));
+	memcpy(amesh.mat.emissive, emissiveFishB, 4 * sizeof(float));
+	amesh.mat.shininess = shininess;
+	amesh.mat.texCount = texcount;
+	fishMeshes.push_back(amesh);
+
+	amesh = createCube();
+	memcpy(amesh.mat.ambient, ambFishG, 4 * sizeof(float));
+	memcpy(amesh.mat.diffuse, diffFishG, 4 * sizeof(float));
+	memcpy(amesh.mat.specular, specFishG, 4 * sizeof(float));
+	memcpy(amesh.mat.emissive, emissiveFishG, 4 * sizeof(float));
+	amesh.mat.shininess = shininess;
+	amesh.mat.texCount = texcount;
+	fishMeshes.push_back(amesh);
+
+	amesh = createCube();
+	memcpy(amesh.mat.ambient, ambFishR, 4 * sizeof(float));
+	memcpy(amesh.mat.diffuse, diffFishR, 4 * sizeof(float));
+	memcpy(amesh.mat.specular, specFishR, 4 * sizeof(float));
+	memcpy(amesh.mat.emissive, emissiveFishR, 4 * sizeof(float));
+	amesh.mat.shininess = shininess;
+	amesh.mat.texCount = texcount;
+	fishMeshes.push_back(amesh);
+
+
+	
+
+	// create geometry and VAO of the sleigh
 	// create geometry and VAO of the boat
 	amesh = createCube();
 	memcpy(amesh.mat.ambient, amb3, 4 * sizeof(float));
