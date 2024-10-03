@@ -34,32 +34,24 @@ uniform Materials mat;
 in Data {
 	vec3 normal;
 	vec3 eye;
-	vec3 lightDir[6];
+	vec3 lightDir;
 } DataIn;
 
 void main() {
 
 	vec4 spec = vec4(0.0);
-	vec4 colorAux = mat.ambient;
 
 	vec3 n = normalize(DataIn.normal);
+	vec3 l = normalize(DataIn.lightDir);
 	vec3 e = normalize(DataIn.eye);
 
-	
-	for (int i = 0; i < NUMBER_POINT_LIGHTS; i++){
-		vec3 l = normalize(DataIn.lightDir[i]);
-
-		float intensity = max(dot(n,l), 0.0);
+	float intensity = max(dot(n,l), 0.0);
 
 	
-		if (intensity > 0.0) {
+	if (intensity > 0.0) {
 
-			vec3 h = normalize(l + e);
-			float intSpec = max(dot(h,n), 0.0);
-			spec = mat.specular * pow(intSpec, mat.shininess);
-		}
-		colorAux += intensity * mat.diffuse + spec;
+		vec3 h = normalize(l + e);
+		float intSpec = max(dot(h,n), 0.0);
+		spec = mat.specular * pow(intSpec, mat.shininess);
 	}
-	
-	colorOut = clamp(colorAux, 0.0, 1.0);
 }
