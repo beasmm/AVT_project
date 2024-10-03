@@ -36,6 +36,7 @@ in Data {
 	vec3 normal;
 	vec3 eye;
 	vec3 lightDir[9];
+
 } DataIn;
 
 void main() {
@@ -50,7 +51,9 @@ void main() {
 	float att = 0.0;
 	float spotExp = 50.0;
 
+
 	vec3 n = normalize(DataIn.normal);
+	vec3 l = normalize(DataIn.lightDir);
 	vec3 e = normalize(DataIn.eye);
 	vec3 sd = normalize(vec3(-coneDir));
 
@@ -102,4 +105,5 @@ void main() {
 		}
 	}
 	colorOut = clamp(colorAux + colorPoint + colorSpot, 0.0, 1.0);
+
 }

@@ -4,7 +4,6 @@ uniform mat4 m_pvm;
 uniform mat4 m_viewModel;
 uniform mat3 m_normal;
 
-
 uniform vec4 point_pos[6];
 uniform vec4 spot_pos[2];
 
