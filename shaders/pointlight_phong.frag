@@ -16,6 +16,7 @@ uniform bool pointLightsOn;
 uniform bool spotLightsOn;
 uniform vec4 coneDir;
 uniform float spotCosCutOff;
+uniform bool fogEffectOn;
 
 uniform vec4 dir_pos;
 
@@ -102,4 +103,13 @@ void main() {
 		}
 	}
 	colorOut = clamp(colorAux + colorPoint + colorSpot, 0.0, 1.0);
+
+	if (fogEffectOn == true) {
+		float dist = length(DataIn.eye);
+
+		float fogAmount = exp(-dist*0.05);
+		vec3 fogColor = vec3( 0.5, 0.6, 0.7);
+		vec3 finalColor = mix(colorOut.rgb, fogColor, fogAmount);
+		colorOut = vec4(finalColor, 1.0);
+	}
 }

@@ -170,7 +170,7 @@ bool isDay = true;
 bool pointLightsOn = false;
 bool spotLightsOn = false;
 float coneDir[4] = { 0.0f, 0.0f, 1.0f, 0.0f };
-
+bool fogEffectOn = false;
 
 // Mouse Tracking Variables
 int startX, startY, tracking = 0;
@@ -600,6 +600,13 @@ void renderScene(void) {
 	else
 		glUniform1i(loc, 0);
 
+
+	loc = glGetUniformLocation(shader.getProgramIndex(), "fogEffectOn");
+	if (fogEffectOn == true)
+		glUniform1i(loc, 1);
+	else
+		glUniform1i(loc, 0);
+
 	loc = glGetUniformLocation(shader.getProgramIndex(), "spotCosCutOff");
 	glUniform1f(loc, 0.93f);
 
@@ -641,7 +648,7 @@ void renderScene(void) {
 
 		if (i == 0) translate(MODEL, 0.0f, -0.01f, 0.0f);
 
-		if (i == 1) translate(MODEL, -10.0f, 0.01f, 0.0f);
+		if (i == 1) translate(MODEL, -10.0f, 0.01f, 0.0f); //island
 
 		// fix house base offset
 		if (i == 2) translate(MODEL, -12.5f, 0.5f, -0.5f);
@@ -803,6 +810,16 @@ void processKeys(unsigned char key, int xx, int yy)
 		case 'o':
 			if (boat.paddle_strength == 1) boat.paddle_strength = 2;
 			else boat.paddle_strength = 1;
+			break; 
+		case 'f': 
+			if (fogEffectOn == false) {
+				fogEffectOn = true;
+				printf("Fog effect enabled.\n");
+			}
+			else {
+				fogEffectOn = false;
+				printf("Fog effect disabled.\n");
+			}
 			break;
 		case 'c': 
 			if (pointLightsOn == false) {
