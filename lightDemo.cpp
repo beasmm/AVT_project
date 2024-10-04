@@ -335,6 +335,13 @@ void timer(int value)
     glutTimerFunc(1000, timer, 0);
 }
 
+void updateFishSpeed(int value) {
+	for (auto& fish : fishList) {
+		fish.speed = fish.speed * 2;
+	}
+	glutTimerFunc(30000, updateFishSpeed, 0);
+}
+
 // ------------------------------------------------------------
 //
 // Despawn fish if away from boat
@@ -1315,6 +1322,7 @@ int main(int argc, char **argv) {
 	glutReshapeFunc(changeSize);
 
 	glutTimerFunc(0, timer, 0);
+	glutTimerFunc(0, updateFishSpeed, 0);
 	//glutIdleFunc(renderScene);  // Use it for maximum performance
 	glutTimerFunc(0, refresh, 0);    //use it to to get 60 FPS whatever
 
