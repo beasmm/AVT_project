@@ -34,6 +34,7 @@
 #include "AVTmathLib.h"
 #include "VertexAttrDef.h"
 #include "geometry.h"
+#include "Texture_Loader.h"
 
 #include "avtFreeType.h"
 
@@ -80,6 +81,8 @@ GLint vm_uniformId;
 GLint normal_uniformId;
 GLint lPos_uniformId[8];
 GLint lightEnabledId;
+GLuint TextureArray[2];
+
 
 GLint tex_loc, tex_loc1, tex_loc2;
 
@@ -642,6 +645,21 @@ void renderScene(void) {
 	int objId=0; //id of the object mesh - to be used as index of mesh: Mymeshes[objID] means the current mesh
 
 	int buoy = 0;
+
+	// Associar os Texture Units aos Objects Texture
+	//stone.tga loaded in TU0; checker.tga loaded in TU1;  lightwood.tga loaded in TU2
+
+	glActiveTexture(GL_TEXTURE0);
+	glBindTexture(GL_TEXTURE_2D, TextureArray[0]);
+
+	glActiveTexture(GL_TEXTURE1);
+	glBindTexture(GL_TEXTURE_2D, TextureArray[1]);
+
+
+	//Indicar aos tres samplers do GLSL quais os Texture Units a serem usados
+	glUniform1i(tex_loc, 0);
+	glUniform1i(tex_loc1, 1);
+
 	for (int i = 0 ; i < 19; ++i) {
 
 		// send the material
@@ -1074,6 +1092,9 @@ void init()
 	cams[2].camPos[1] = r * sin(beta * 3.14f / 180.0f);
 	cams[2].camPos[2] = r * cos(alpha * 3.14f / 180.0f) * cos(beta * 3.14f / 180.0f);
 
+	glGenTextures(2, TextureArray);
+	Texture2D_Loader(TextureArray, "azure-blue-paint-diffusing-with-water.jpg", 0);
+	Texture2D_Loader(TextureArray, "clear-ocean-water-texture.jpg", 1);
 
 	// create geometry and VAO of the water plane
 	float amb0[] = { 0.2f, 0.3f, 0.7f, 1.0f };
