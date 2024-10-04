@@ -76,22 +76,6 @@ void main() {
 
 		colorAux += max(intensity *  mat.diffuse + spec, mat.ambient);
 
-		if(texMode == 0) // modulate diffuse color with texel color
-		{
-			texel = texture(texmap2, DataIn.tex_coord);  // texel from lighwood.tga
-			colorOut = max(intensity * mat.diffuse * texel + spec,0.07 * texel);
-		}
-		else if (texMode == 2) // diffuse color is replaced by texel color, with specular area or ambient (0.1*texel)
-		{
-			texel = texture(texmap, DataIn.tex_coord);  // texel from stone.tga
-			colorOut = max(intensity*texel + spec, 0.07*texel);
-		}
-		else // multitexturing
-		{
-			texel = texture(texmap2, DataIn.tex_coord);  // texel from lighwood.tga
-			texel1 = texture(texmap1, DataIn.tex_coord);  // texel from checker.tga
-			colorOut = max(intensity*texel*texel1 + spec, 0.07*texel*texel1);
-		}
 	}
 
 	if (pointLightsOn == true) { // pointlights are on
