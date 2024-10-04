@@ -159,6 +159,7 @@ float spotLightPos[2][4] = {
 	{-0.1f, 0.2f, 0.8f, 1.0f },
 	{ 0.1f, 0.2f, 0.8f, 1.0f }
 };
+float spotLightAngle = 0.1;
 
 struct DirectionalLight {
 	float direction[3] = { -0.2f, -1.0f, -0.3f };
@@ -289,9 +290,9 @@ void resetBoat() {
 	boat.position[0] = 0.0;
 	boat.position[2] = 0.0;
 	boat.speed = 0.0;
-	cams[2].camPos[0] = 20 * sin(alpha * 3.14f / 180.0f) * cos(beta * 3.14f / 180.0f);
+	cams[2].camPos[0] = 0;
 	cams[2].camPos[1] = 20 * sin(beta * 3.14f / 180.0f);
-	cams[2].camPos[2] = 20 * cos(alpha * 3.14f / 180.0f) * cos(beta * 3.14f / 180.0f);
+	cams[2].camPos[2] = -20;
 	cams[2].camTarget[0] = 0.0;
 	cams[2].camTarget[1] = 0.0;
 }
@@ -456,10 +457,11 @@ void refresh(int value)
 	else if (boat.speed < 0) boat.speed += speed_decay;
 
 	if (boat.speed != 0) {
-		for (int i = 0; i < 2; i++) { // calculate spotlights new positions
-			spotLightPos[i][0] = boat.position[0] + 0.8f * sin(angle_rad);
-			spotLightPos[i][2] = boat.position[2] + 0.8f * cos(angle_rad);
-		}
+		spotLightPos[0][0] = boat.position[0] + 0.8f * sin(angle_rad - spotLightAngle);
+		spotLightPos[0][2] = boat.position[2] + 0.8f * cos(angle_rad);
+		spotLightPos[1][0] = boat.position[0] + 0.8f * sin(angle_rad + spotLightAngle);
+		spotLightPos[1][2] = boat.position[2] + 0.8f * cos(angle_rad);
+
 		//calculate cone direction
 		coneDir[0] = sin(angle_rad);
 		coneDir[2] = cos(angle_rad);
@@ -1088,9 +1090,9 @@ void init()
 
 	float angle_rad = boat.angle * (3.14 / 180.0f);
 
-	cams[2].camPos[0] = r * sin(alpha * 3.14f / 180.0f) * cos(beta * 3.14f / 180.0f);
+	cams[2].camPos[0] = 0;
 	cams[2].camPos[1] = r * sin(beta * 3.14f / 180.0f);
-	cams[2].camPos[2] = r * cos(alpha * 3.14f / 180.0f) * cos(beta * 3.14f / 180.0f);
+	cams[2].camPos[2] = -r;
 
 	glGenTextures(2, TextureArray);
 	Texture2D_Loader(TextureArray, "azure-blue-paint-diffusing-with-water.jpg", 0);
