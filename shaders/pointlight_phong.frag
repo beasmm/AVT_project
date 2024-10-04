@@ -51,7 +51,7 @@ void main() {
 	vec4 texel, texel1; 
 
 	vec4 spec = vec4(0.0);
-	vec4 colorAux = vec4(0.0);
+	vec4 colorAux = mat.ambient;
 	vec4 colorPoint = vec4(0.0);
 	vec4 colorSpot = vec4(0.0);
 
@@ -75,6 +75,7 @@ void main() {
 		}
 
 		colorAux += max(intensity *  mat.diffuse + spec, mat.ambient);
+
 		if(texMode == 0) // modulate diffuse color with texel color
 		{
 			texel = texture(texmap2, DataIn.tex_coord);  // texel from lighwood.tga
@@ -103,7 +104,7 @@ void main() {
 				float intSpec = max(dot(h,n), 0.0);
 				spec = mat.specular * pow(intSpec, mat.shininess);
 			}
-		colorPoint += intensity * mat.diffuse + spec;
+		colorPoint += intensity * mat.diffuse * 0.5+ spec;
 		if(texMode == 0) // modulate diffuse color with texel color
 		{
 			texel = texture(texmap2, DataIn.tex_coord);  // texel from lighwood.tga

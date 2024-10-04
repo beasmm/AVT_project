@@ -153,7 +153,7 @@ float buoy_positions[6][2] = {
 };
 
 // lights
-float directionalLightDir[4] = { 1.0f, 1.0f, 1.0f, 0.0f };
+float directionalLightDir[4] = { -1.0f, -1.0f, -1.0f, 0.0f };
 float pointLightPos[6][4];
 float spotLightPos[2][4] = {
 	{-0.1f, 0.2f, 0.8f, 1.0f },
