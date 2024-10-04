@@ -428,6 +428,7 @@ void updateFish(float boatPos[3]) {
 
 void refresh(int value)
 {
+	AABB boatAABB = calculateAABBFromOBB(boat.boatOBB);
 	if (boat.left_paddle_working || boat.right_paddle_working) {
 		if (boat.speed <= 1 && boat.paddle_direction == 1)
 			boat.speed += 0.1 * boat.paddle_strength;
@@ -469,14 +470,15 @@ void refresh(int value)
 	cams[2].camTarget[1] = 0.0f;
 	cams[2].camTarget[2] = boat.position[2];
 
-	AABB boatAABB = calculateAABBFromOBB(boat.boatOBB);
+	
 	if (isCollidingWithIsland(boatAABB)) {
-		resetBoat();
+		boat.speed = 0.0;
+
 	}
-	else {
+	else {	
 		for (int i = 0; i < 6; i++) {
 			if (isCollidingWithBuoy(boatAABB, i)) {
-				resetBoat();
+				boat.speed = 0.0;
 			}
 		}
 	}
