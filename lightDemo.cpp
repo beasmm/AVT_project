@@ -82,6 +82,7 @@ GLint normal_uniformId;
 GLint lPos_uniformId[8];
 GLint lightEnabledId;
 GLuint TextureArray[2];
+GLint texMode_uniformId;
 
 
 GLint tex_loc, tex_loc1, tex_loc2;
@@ -675,7 +676,11 @@ void renderScene(void) {
 		glUniform1f(loc, myMeshes[objId].mat.shininess);
 		pushMatrix(MODEL);
 
-		if (i == 0) translate(MODEL, 0.0f, -0.01f, 0.0f);
+		if (i == 0) {
+			translate(MODEL, 0.0f, -0.01f, 0.0f);
+			glUniform1i(texMode_uniformId, 1);
+		}
+		else glUniform1d(texMode_uniformId, 0);
 
 		if (i == 1) translate(MODEL, -10.0f, 0.01f, 0.0f); //island
 
@@ -1033,6 +1038,7 @@ GLuint setupShaders() {
 		lPos_uniformId[6 + i] = glGetUniformLocation(shader.getProgramIndex(), glString);
 	}
   
+	texMode_uniformId = glGetUniformLocation(shader.getProgramIndex(), "texMode");
 	tex_loc = glGetUniformLocation(shader.getProgramIndex(), "texmap");
 	tex_loc1 = glGetUniformLocation(shader.getProgramIndex(), "texmap1");
 	tex_loc2 = glGetUniformLocation(shader.getProgramIndex(), "texmap2");
