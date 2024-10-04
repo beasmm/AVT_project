@@ -466,8 +466,8 @@ void refresh(int value)
 		coneDir[0] = sin(angle_rad);
 		coneDir[2] = cos(angle_rad);
 
-		cams[2].camPos[0] += boat.speed * sin(angle_rad) * deltaT;
-		cams[2].camPos[2] += boat.speed * cos(angle_rad) * deltaT;
+		cams[2].camPos[0] = boat.position[0] - r * sin(angle_rad);
+		cams[2].camPos[2] = boat.position[2] - r * cos(angle_rad) ;
 	}
 
 
@@ -960,6 +960,7 @@ void processMouseMotion(int xx, int yy)
 		rAux = r + (deltaY * 0.01f);
 		if (rAux < 0.1f)
 			rAux = 0.1f;
+
 	}
 
 	cams[2].camPos[0] = boat.position[0] + rAux * sin(alphaAux * 3.14f / 180.0f) * cos(betaAux * 3.14f / 180.0f);
