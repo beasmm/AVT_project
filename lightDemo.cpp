@@ -825,10 +825,10 @@ void processKeys(unsigned char key, int xx, int yy)
 		case '3': active = 2; break;
 
 		case 'a':
-			boat.left_paddle_working = true;
+			boat.right_paddle_working = true;
 			break;
 		case 'd':
-			boat.right_paddle_working = true;
+			boat.left_paddle_working = true;
 			break;
 		case 's':
 			if (boat.paddle_direction == 1) boat.paddle_direction = 0;
@@ -884,10 +884,10 @@ void processKeys(unsigned char key, int xx, int yy)
 void processKeysUp(unsigned char key, int xx, int yy) {
 	switch (key) {
 		case 'a':
-			boat.left_paddle_working = false;
+			boat.right_paddle_working = false;
 			break;
 		case 'd':
-			boat.right_paddle_working = false;
+			boat.left_paddle_working = false;
 			break;
 	}
 }
