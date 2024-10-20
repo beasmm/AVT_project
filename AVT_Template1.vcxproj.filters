@@ -33,6 +33,9 @@
     <ClCompile Include="avtFreeType.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="meshFromAssimp.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="AVTmathLib.h">
@@ -59,13 +62,13 @@
     <ClInclude Include="avtFreeType.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="meshFromAssimp.h">
+      <Filter>Source Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="Dependencies.exe" />
     <None Include="shaders\text.frag">
-      <Filter>Resource Files</Filter>
-    </None>
-    <None Include="shaders\text.vert">
       <Filter>Resource Files</Filter>
     </None>
     <None Include="shaders\pointlight_gouraud.frag">
@@ -78,6 +81,9 @@
       <Filter>Resource Files</Filter>
     </None>
     <None Include="shaders\pointlight_phong.vert">
+      <Filter>Resource Files</Filter>
+    </None>
+    <None Include="shaders\text.vert">
       <Filter>Resource Files</Filter>
     </None>
   </ItemGroup>

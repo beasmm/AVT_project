@@ -28,6 +28,12 @@
 
 #include <IL/il.h>
 
+// assimp include files. These three are usually needed.
+#include "assimp/Importer.hpp"	//OO version Header!
+#include "assimp/scene.h"
+
+// Assimp meshes
+#include "meshFromAssimp.h"
 
 // Use Very Simple Libs
 #include "VSShaderlib.h"
@@ -35,7 +41,6 @@
 #include "VertexAttrDef.h"
 #include "geometry.h"
 #include "Texture_Loader.h"
-
 #include "avtFreeType.h"
 
 #define ORTHOGONAL 0
@@ -46,7 +51,7 @@
 
 using namespace std;
 
-#define CAPTION "AVT Demo: Phong Shading and Text rendered with FreeType"
+#define CAPTION "AVT 2024/25 project"
 int WindowHandle = 0;
 int WinX = 1024, WinY = 768;
 
@@ -56,12 +61,23 @@ unsigned int FrameCount = 0;
 VSShaderLib shader;  //geometry
 VSShaderLib shaderText;  //render bitmap text
 
-//File with the font
-const string font_name = "fonts/arial.ttf";
+// Create an instance of the Importer class
+Assimp::Importer importer;
+Assimp::Importer importer1;
+
+// the global Assimp scene object
+const aiScene* scene;
+const aiScene* scene1;
+
+// scale factor for the Assimp model to fit in the window
+float scaleFactor;
+float scaleFactor1;
+
+std::string model_path = "minicooper/minicooper.obj";  //initialized by the user input at the console
 
 //Vector with meshes
 vector<struct MyMesh> myMeshes;
-
+vector<struct MyMesh> boatMesh;
 vector<struct MyMesh> fishMeshes;
 
 //active camera variable
@@ -75,7 +91,6 @@ extern float mCompMatrix[COUNT_COMPUTED_MATRICES][16];
 
 /// The normal matrix
 extern float mNormal3x3[9];
-
 GLint pvm_uniformId;
 GLint vm_uniformId;
 GLint normal_uniformId;
@@ -83,7 +98,13 @@ GLint lPos_uniformId[8];
 GLint lightEnabledId;
 GLuint TextureArray[2];
 GLint texMode_uniformId;
+GLuint* textureIds;
 
+GLint normalMap_loc;
+GLint specularMap_loc;
+GLint diffMapCount_loc;
+
+int play_time = 0;
 
 GLint tex_loc, tex_loc1, tex_loc2;
 
@@ -122,6 +143,7 @@ public:
 	bool left_paddle_working = false;
 	bool right_paddle_working = false;
 	int paddle_angle = 0;
+	int lives = 5;
 	OBB boatOBB;
 };
 
@@ -176,6 +198,8 @@ bool pointLightsOn = false;
 bool spotLightsOn = false;
 float coneDir[4] = { 0.0f, 0.0f, 1.0f, 0.0f };
 bool fogEffectOn = false;
+
+bool isPaused = false;
 
 // Mouse Tracking Variables
 int startX, startY, tracking = 0;
@@ -297,6 +321,12 @@ void resetBoat() {
 	cams[2].camTarget[0] = 0.0;
 	cams[2].camTarget[1] = 0.0;
 }
+
+void resetGame() {
+	resetBoat();
+	play_time = 0;
+	boat.lives = 5;
+}
 //////////////////////////////////////////////////////////////////////////
 
 
@@ -333,6 +363,8 @@ void timer(int value)
 	std::ostringstream oss;
 	oss << CAPTION << ": " << FrameCount << " FPS @ (" << WinX << "x" << WinY << ")";
 	std::string s = oss.str();
+
+	play_time += 1;
 
 	glutSetWindow(WindowHandle);
 	glutSetWindowTitle(s.c_str());
@@ -399,6 +431,10 @@ void spawnFish(float boatPos[3]) {
 void fishCollision(AABB boatAABB, AABB fishAABB) {
 	if (isColliding(boatAABB, fishAABB)) {
 		resetBoat();
+		boat.lives -= 1;
+		if (boat.lives == 0) {
+			resetGame();
+		}
 	}
 }
 
@@ -433,7 +469,12 @@ void updateFish(float boatPos[3]) {
 
 void refresh(int value)
 {
-	AABB boatAABB = calculateAABBFromOBB(boat.boatOBB);
+	if (isPaused) {
+		glutPostRedisplay();
+		glutTimerFunc(1000 / 60, refresh, 0);
+		return;
+	}
+
 	if (boat.left_paddle_working || boat.right_paddle_working) {
 		if (boat.speed <= 1 && boat.paddle_direction == 1)
 			boat.speed += 0.1 * boat.paddle_strength;
@@ -458,6 +499,7 @@ void refresh(int value)
 	else if (boat.speed < 0) boat.speed += speed_decay;
 
 	if (boat.speed != 0) {
+		AABB boatAABB = calculateAABBFromOBB(boat.boatOBB);
 		spotLightPos[0][0] = boat.position[0] + 0.8f * sin(angle_rad - spotLightAngle);
 		spotLightPos[0][2] = boat.position[2] + 0.8f * cos(angle_rad);
 		spotLightPos[1][0] = boat.position[0] + 0.8f * sin(angle_rad + spotLightAngle);
@@ -469,26 +511,23 @@ void refresh(int value)
 
 		cams[2].camPos[0] = boat.position[0] - r * sin(angle_rad);
 		cams[2].camPos[2] = boat.position[2] - r * cos(angle_rad) ;
-	}
 
+		cams[2].camTarget[0] = boat.position[0];
+		cams[2].camTarget[1] = 0.0f;
+		cams[2].camTarget[2] = boat.position[2];
 
-	cams[2].camTarget[0] = boat.position[0];
-	cams[2].camTarget[1] = 0.0f;
-	cams[2].camTarget[2] = boat.position[2];
+		if (isCollidingWithIsland(boatAABB)) {
+			boat.speed = 0.0;
 
-	
-	if (isCollidingWithIsland(boatAABB)) {
-		boat.speed = 0.0;
-
-	}
-	else {	
-		for (int i = 0; i < 6; i++) {
-			if (isCollidingWithBuoy(boatAABB, i)) {
-				boat.speed = 0.0;
+		}
+		else {	
+			for (int i = 0; i < 6; i++) {
+				if (isCollidingWithBuoy(boatAABB, i)) {
+					boat.speed = 0.0;
+				}
 			}
 		}
 	}
-
 	glutPostRedisplay();
 	glutTimerFunc(1000 / 60, refresh, 0);
 }
@@ -556,8 +595,166 @@ void renderFish() {
 
 // ------------------------------------------------------------
 //
+// RenderHUD
+//
+
+void renderHUD() {
+	int m_viewport[4];
+	int windowWidth = glutGet(GLUT_WINDOW_WIDTH);
+	int windowHeight = glutGet(GLUT_WINDOW_HEIGHT);
+	float char_width = 0.0f;
+	float char_height = 0.0f;
+
+	// Initialization of freetype library with font_name file
+	freeType_init("fonts/PixelGame-R9AZe.otf", 0, 84, char_width, char_height);
+
+	//Render text (bitmap fonts) in screen coordinates. So use ortoghonal projection with viewport coordinates.
+
+	pushMatrix(MODEL);
+	loadIdentity(MODEL);
+	pushMatrix(PROJECTION);
+
+	glGetIntegerv(GL_VIEWPORT, m_viewport);
+	// switch to orthogonal projection
+	loadIdentity(PROJECTION);
+	pushMatrix(VIEW);
+	loadIdentity(VIEW);
+	ortho(m_viewport[0], m_viewport[0] + m_viewport[2] - 1, m_viewport[1], m_viewport[1] + m_viewport[3] - 1, -1, 1);
+	RenderText(shaderText, "TIME: " + std::to_string(play_time), 0.0f, windowHeight - char_height / 2.0f, 0.5f, 1.0f, 1.0f, 1.0f);
+	float xPos = windowWidth - TextWidth("LIVES: ", 0.5f, char_width);
+	RenderText(shaderText, "LIVES: " + std::to_string(boat.lives), xPos, windowHeight - char_height / 2.0f, 0.5f, 1.0f, 1.0f, 1.0f);
+	if (isPaused) {
+		xPos = windowWidth / 2.0f - (TextWidth("PAUSED", 0.5f, char_width) / 2.0f);
+		float yPos = windowHeight / 2.0f;
+		RenderText(shaderText, "PAUSED", xPos, yPos, 1.0f, 1.0f, 0.0f, 0.0f);
+	}
+	popMatrix(PROJECTION);
+	popMatrix(VIEW);
+	popMatrix(MODEL);
+	glEnable(GL_DEPTH_TEST);
+	glDisable(GL_BLEND);
+
+
+
+
+}
+
+
+// ------------------------------------------------------------
+//
 // Render stufff
 //
+
+// Recursive render of the Assimp Scene Graph
+
+void aiRecursive_render(const aiNode* nd, vector<struct MyMesh>& boatMesh, GLuint*& textureIds)
+{
+	GLint loc;
+
+	// Get node transformation matrix
+	aiMatrix4x4 m = nd->mTransformation;
+	// OpenGL matrices are column major
+	m.Transpose();
+
+	// save model matrix and apply node transformation
+	pushMatrix(MODEL);
+	translate(MODEL, 0.0f, 12.0f, 0.0f);
+	scale(MODEL, 0.1f, 0.1f, 0.1f);
+
+	float aux[16];
+	memcpy(aux, &m, sizeof(float) * 16);
+	multMatrix(MODEL, aux);
+
+
+	// draw all meshes assigned to this node
+	for (unsigned int n = 0; n < nd->mNumMeshes; n++) {
+
+		// send the material
+		loc = glGetUniformLocation(shader.getProgramIndex(), "mat.ambient");
+		glUniform4fv(loc, 1, boatMesh[nd->mMeshes[n]].mat.ambient);
+		loc = glGetUniformLocation(shader.getProgramIndex(), "mat.diffuse");
+		glUniform4fv(loc, 1, boatMesh[nd->mMeshes[n]].mat.diffuse);
+		loc = glGetUniformLocation(shader.getProgramIndex(), "mat.specular");
+		glUniform4fv(loc, 1, boatMesh[nd->mMeshes[n]].mat.specular);
+		loc = glGetUniformLocation(shader.getProgramIndex(), "mat.emissive");
+		glUniform4fv(loc, 1, boatMesh[nd->mMeshes[n]].mat.emissive);
+		loc = glGetUniformLocation(shader.getProgramIndex(), "mat.shininess");
+		glUniform1f(loc, boatMesh[nd->mMeshes[n]].mat.shininess);
+		loc = glGetUniformLocation(shader.getProgramIndex(), "mat.texCount");
+		glUniform1i(loc, boatMesh[nd->mMeshes[n]].mat.texCount);
+
+		unsigned int  diffMapCount = 0;  //read 2 diffuse textures
+
+		//devido ao fragment shader suporta 2 texturas difusas simultaneas, 1 especular e 1 normal map
+
+		glUniform1i(normalMap_loc, false);   //GLSL normalMap variable initialized to 0
+		glUniform1i(specularMap_loc, false);
+		glUniform1ui(diffMapCount_loc, 0);
+
+		if (boatMesh[nd->mMeshes[n]].mat.texCount != 0)
+			for (unsigned int i = 0; i < boatMesh[nd->mMeshes[n]].mat.texCount; ++i) {
+
+				//Activate a TU with a Texture Object
+				GLuint TU = boatMesh[nd->mMeshes[n]].texUnits[i];
+				glActiveTexture(GL_TEXTURE0 + TU);
+				glBindTexture(GL_TEXTURE_2D, textureIds[TU]);
+
+				if (boatMesh[nd->mMeshes[n]].texTypes[i] == DIFFUSE) {
+					if (diffMapCount == 0) {
+						diffMapCount++;
+						loc = glGetUniformLocation(shader.getProgramIndex(), "texUnitDiff");
+						glUniform1i(loc, TU);
+						glUniform1ui(diffMapCount_loc, diffMapCount);
+					}
+					else if (diffMapCount == 1) {
+						diffMapCount++;
+						loc = glGetUniformLocation(shader.getProgramIndex(), "texUnitDiff1");
+						glUniform1i(loc, TU);
+						glUniform1ui(diffMapCount_loc, diffMapCount);
+					}
+					else printf("Only supports a Material with a maximum of 2 diffuse textures\n");
+				}
+				else if (boatMesh[nd->mMeshes[n]].texTypes[i] == SPECULAR) {
+					loc = glGetUniformLocation(shader.getProgramIndex(), "texUnitSpec");
+					glUniform1i(loc, TU);
+					glUniform1i(specularMap_loc, true);
+				}
+				else if (boatMesh[nd->mMeshes[n]].texTypes[i] == NORMALS) { //Normal map
+					loc = glGetUniformLocation(shader.getProgramIndex(), "texUnitNormalMap");
+					//if (normalMapKey)
+					//	glUniform1i(normalMap_loc, normalMapKey);
+					glUniform1i(loc, TU);
+
+				}
+				else printf("Texture Map not supported\n");
+			}
+
+		// send matrices to OGL
+		computeDerivedMatrix(PROJ_VIEW_MODEL);
+		glUniformMatrix4fv(vm_uniformId, 1, GL_FALSE, mCompMatrix[VIEW_MODEL]);
+		glUniformMatrix4fv(pvm_uniformId, 1, GL_FALSE, mCompMatrix[PROJ_VIEW_MODEL]);
+		computeNormalMatrix3x3();
+		glUniformMatrix3fv(normal_uniformId, 1, GL_FALSE, mNormal3x3);
+
+		// bind VAO
+		glBindVertexArray(boatMesh[nd->mMeshes[n]].vao);
+
+		if (!shader.isProgramValid()) {
+			printf("Program Not Valid!\n");
+			exit(1);
+		}
+		// draw
+		glDrawElements(boatMesh[nd->mMeshes[n]].type, boatMesh[nd->mMeshes[n]].numIndexes, GL_UNSIGNED_INT, 0);
+		glBindVertexArray(0);
+	}
+
+	// draw all children
+	for (unsigned int n = 0; n < nd->mNumChildren; ++n) {
+		aiRecursive_render(nd->mChildren[n], boatMesh, textureIds);
+	}
+	popMatrix(MODEL);
+}
+
 
 void renderScene(void) {
 
@@ -663,7 +860,7 @@ void renderScene(void) {
 	glUniform1i(tex_loc, 0);
 	glUniform1i(tex_loc1, 1);
 
-	for (int i = 0 ; i < 19; ++i) {
+	for (int i = 0 ; i < 18; ++i) {
 
 		// send the material
 		loc = glGetUniformLocation(shader.getProgramIndex(), "mat.ambient");
@@ -701,7 +898,7 @@ void renderScene(void) {
 			rotate(MODEL, boat.angle, 0, 1, 0);
 			scale(MODEL, 0.4f, 0.2f, 0.7f);
 		}
-		if (i == 8) { // boat front
+		if (i == 7) { // boat front
 			translate(MODEL, boat.position[0], 0.1, boat.position[2]);
 			rotate(MODEL, boat.angle, 0, 1, 0);
 			translate(MODEL, 0.0f, 0.0f, 0.35f);
@@ -709,7 +906,7 @@ void renderScene(void) {
 			scale(MODEL, 1, 1, 0.5);
 			rotate(MODEL, 45, 0, 1, 0);
 		}
-		if (i == 10) { // left row handle
+		if (i == 9) { // left row handle
 			translate(MODEL, boat.position[0], 0.15f, boat.position[2]);
 			rotate(MODEL, boat.angle, 0, 1, 0);
 			if (boat.left_paddle_working && boat.paddle_direction == 1)	
@@ -719,7 +916,7 @@ void renderScene(void) {
 			translate(MODEL, -0.3f, 0.0f, 0.0f);
 			rotate(MODEL, -45, 0, 0, 1);
 		}
-		if (i == 9 ) { // right row handle
+		if (i == 8 ) { // right row handle
 			translate(MODEL, boat.position[0], 0.15f, boat.position[2]);
 			rotate(MODEL, boat.angle, 0, 1, 0);
 			if (boat.right_paddle_working && boat.paddle_direction == 1)
@@ -729,7 +926,7 @@ void renderScene(void) {
 			translate(MODEL, 0.3f, 0.0f, 0.0f);
 			rotate(MODEL, 45, 0, 0, 1);
 		}
-		if (i == 11) { //left row paddle
+		if (i == 10) { //left row paddle
 			translate(MODEL, boat.position[0], 0.0f, boat.position[2]);
 			rotate(MODEL, boat.angle, 0, 1, 0);
 			translate(MODEL, 0.0f, 0.15f, 0.0f);
@@ -742,7 +939,7 @@ void renderScene(void) {
 			rotate(MODEL, 45, 0, 0, 1);
 			scale(MODEL, 0.1f, 0.15f, 0.05f);
 		}
-		if (i == 12) { //right3 row paddle
+		if (i == 11) { //right3 row paddle
 			translate(MODEL, boat.position[0], 0.0f, boat.position[2]);
 			rotate(MODEL, boat.angle, 0, 1, 0);
 			translate(MODEL, 0.0f, 0.15f, 0.0f);
@@ -756,7 +953,7 @@ void renderScene(void) {
 			scale(MODEL, 0.1f, 0.15f, 0.05f);
 		}
 		
-		if (i > 12) {
+		if (i > 11) {
 			translate(MODEL, buoy_positions[buoy][0], 0.0f, buoy_positions[buoy][1]);
 			buoy++;
 		}
@@ -781,6 +978,13 @@ void renderScene(void) {
 	}
 	renderFish();
 
+	//pushMatrix(MODEL);
+	//scale(MODEL, 0.4f, 0.2f, 0.7f);
+	//aiRecursive_render(scene->mRootNode, boatMesh, textureIds);
+	//popMatrix(MODEL);
+
+	renderHUD();
+
 	//Render text (bitmap fonts) in screen coordinates. So use ortoghonal projection with viewport coordinates.
 	glDisable(GL_DEPTH_TEST);
 	//the glyph contains transparent background colors and non-transparent for the actual character pixels. So we use the blending
@@ -789,21 +993,7 @@ void renderScene(void) {
 	int m_viewport[4];
 	glGetIntegerv(GL_VIEWPORT, m_viewport);
 
-	//viewer at origin looking down at  negative z direction
-	pushMatrix(MODEL);
-	loadIdentity(MODEL);
-	pushMatrix(PROJECTION);
-	loadIdentity(PROJECTION);
-	pushMatrix(VIEW);
-	loadIdentity(VIEW);
-	ortho(m_viewport[0], m_viewport[0] + m_viewport[2] - 1, m_viewport[1], m_viewport[1] + m_viewport[3] - 1, -1, 1);
-	RenderText(shaderText, "This is a sample text", 25.0f, 25.0f, 1.0f, 0.5f, 0.8f, 0.2f);
-	RenderText(shaderText, "AVT Light and Text Rendering Demo", 440.0f, 570.0f, 0.5f, 0.3, 0.7f, 0.9f);
-	popMatrix(PROJECTION);
-	popMatrix(VIEW);
-	popMatrix(MODEL);
-	glEnable(GL_DEPTH_TEST);
-	glDisable(GL_BLEND);
+
 
 	glutSwapBuffers();
 }
@@ -832,16 +1022,20 @@ void processKeys(unsigned char key, int xx, int yy)
 		case '3': active = 2; break;
 
 		case 'a':
+			if (isPaused) break;
 			boat.right_paddle_working = true;
 			break;
 		case 'd':
+			if (isPaused) break;
 			boat.left_paddle_working = true;
 			break;
 		case 's':
+			if (isPaused) break;
 			if (boat.paddle_direction == 1) boat.paddle_direction = 0;
 			else boat.paddle_direction = 1;
 			break;
 		case 'o':
+			if (isPaused) break;
 			if (boat.paddle_strength == 1) boat.paddle_strength = 2;
 			else boat.paddle_strength = 1;
 			break; 
@@ -884,6 +1078,12 @@ void processKeys(unsigned char key, int xx, int yy)
 				isDay = false;
 				printf("Day lights disabled.\n");
 			}
+			break;
+		case 'r':
+			//reset;
+			break;
+		case 'p':
+			isPaused = !isPaused;
 			break;
 	}
 }
@@ -1090,9 +1290,6 @@ void init()
 	}
 	ilInit();
 
-	/// Initialization of freetype library with font_name file
-	freeType_init(font_name);
-
 	// set the camera position based on its spherical coordinates
 
 	float angle_rad = boat.angle * (3.14 / 180.0f);
@@ -1104,6 +1301,13 @@ void init()
 	glGenTextures(2, TextureArray);
 	Texture2D_Loader(TextureArray, "azure-blue-paint-diffusing-with-water.jpg", 0);
 	Texture2D_Loader(TextureArray, "clear-ocean-water-texture.jpg", 1);
+
+	//import 3D file into Assimp scene graph
+	if (!Import3DFromFile(model_path, importer, scene, scaleFactor))
+		return;
+
+	//creation of Mymesh array with VAO Geometry and Material and array of Texture Objs for the model
+	boatMesh = createMeshFromAssimp(scene, textureIds);
 
 	// create geometry and VAO of the water plane
 	float amb0[] = { 0.2f, 0.3f, 0.7f, 1.0f };
@@ -1257,11 +1461,7 @@ void init()
 	amesh.mat.texCount = texcount;
 	fishMeshes.push_back(amesh);
 
-
-	
-
-	// create geometry and VAO of the sleigh
-	// create geometry and VAO of the boat
+	//// create geometry and VAO of the boat
 	amesh = createCube();
 	memcpy(amesh.mat.ambient, amb3, 4 * sizeof(float));
 	memcpy(amesh.mat.diffuse, diff3, 4 * sizeof(float));

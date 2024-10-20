@@ -26,11 +26,10 @@ struct Character {
 std::map<GLchar, Character> Characters;
 unsigned int VAO, VBO;
 
-void freeType_init(const string font_name)
+void freeType_init(const string font_name, int width, int height, float &char_width, float &char_height)
 {
 
 	// FreeType initialization
-	   // --------
 	FT_Library ft;
 	// All functions return a value different than 0 whenever an error occurred
 	if (FT_Init_FreeType(&ft))
@@ -48,7 +47,7 @@ void freeType_init(const string font_name)
 	}
 	else {
 		// set size to load glyphs as
-		FT_Set_Pixel_Sizes(face, 0, 48);
+		FT_Set_Pixel_Sizes(face, width, height);
 
 		// disable byte-alignment restriction
 		glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
@@ -92,6 +91,11 @@ void freeType_init(const string font_name)
 		}
 		glBindTexture(GL_TEXTURE_2D, 0);
 	}
+
+	// Get the character size
+	char_width = face->glyph->bitmap.width;
+	char_height = face->glyph->bitmap.rows;
+
 	// destroy FreeType once we're finished
 	FT_Done_Face(face);
 	FT_Done_FreeType(ft);
@@ -161,4 +165,24 @@ void RenderText(VSShaderLib& shaderText, std::string text, float x, float y, flo
 	}
 	glBindVertexArray(0);
 	glBindTexture(GL_TEXTURE_2D, 0);
+}
+
+float TextWidth(const std::string& text, float scale, float char_width) {
+	float width = 0.0f;
+
+	for (char c : text) {
+		width += char_width * scale;
+	}
+
+	return width;
+}
+
+float TextHeight(const std::string& text, float scale, float char_height) {
+	float height = 0.0f;
+
+	for (char c : text) {
+		height += char_height * scale;
+	}
+
+	return height;
 }

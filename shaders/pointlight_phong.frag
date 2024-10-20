@@ -13,6 +13,9 @@ uniform DirectionalLight dirLight;
 uniform sampler2D texmap;
 uniform sampler2D texmap1;
 uniform sampler2D texmap2;
+uniform sampler2D texUnitDiff;
+uniform sampler2D texUnitDiff1;
+uniform sampler2D texUnitSpec; 
 
 uniform int texMode;
 
@@ -23,6 +26,9 @@ uniform bool spotLightsOn;
 uniform vec4 coneDir;
 uniform float spotCosCutOff;
 uniform bool fogEffectOn;
+
+uniform bool specularMap;
+uniform uint diffMapCount;
 
 uniform vec4 dir_pos;
 
@@ -56,6 +62,7 @@ void main() {
 	vec4 colorSpot = vec4(0.0);
 
 	float intSpec = 0.0;
+	vec4 diff, auxSpec;
 
 	float att = 0.0;
 	float spotExp = 50.0;
@@ -68,12 +75,28 @@ void main() {
 		vec3 l = normalize(vec3(-dir_pos));
 		float intensity = max(dot(n,l), 0.0);
 
+//		if (mat.texCount == 0) {
+			diff = mat.diffuse;
+			auxSpec = mat.specular;
+//		}
+//		else {
+//			if (diffMapCount == 0)
+//				diff = mat.diffuse;
+//			else if (diffMapCount == 1)
+//				diff = mat.diffuse * texture(texUnitDiff, DataIn.tex_coord);
+//			else
+//				diff = mat.diffuse * texture(texUnitDiff, DataIn.tex_coord) * texture(texUnitDiff1, DataIn.tex_coord);
+//	}
+//		if (specularMap)
+//			auxSpec = mat.specular * texture(texUnitSpec, DataIn.tex_coord);
+//		else
+			auxSpec = mat.specular;
+
 		if (intensity > 0.0) {
 			vec3 h = normalize(l + e);
 			float intSpec = max(dot(h, n), 0.0);
-			spec = mat.specular * pow(intSpec, mat.shininess);
+			spec = auxSpec * pow(intSpec, mat.shininess);
 		}
-
 		colorAux += max(intensity *  mat.diffuse + spec, mat.ambient);
 
 	}
@@ -83,28 +106,30 @@ void main() {
 			vec3 l = normalize(DataIn.lightDir[i]);
 			float intensity = max(dot(n,l), 0.0);
 			spec = vec4(0.0);
+
+//			if (mat.texCount == 0) {
+				diff = mat.diffuse;
+				auxSpec = mat.specular;
+//			}
+//			else {
+//				if (diffMapCount == 0)
+//					diff = mat.diffuse;
+//				else if (diffMapCount == 1)
+//					diff = mat.diffuse * texture(texUnitDiff, DataIn.tex_coord);
+//				else
+//					diff = mat.diffuse * texture(texUnitDiff, DataIn.tex_coord) * texture(texUnitDiff1, DataIn.tex_coord);
+//			}
+//			if (specularMap)
+//				auxSpec = mat.specular * texture(texUnitSpec, DataIn.tex_coord);
+//			else
+				auxSpec = mat.specular;
+
 			if (intensity > 0.0) {
 				vec3 h = normalize(l + e);
 				float intSpec = max(dot(h,n), 0.0);
 				spec = mat.specular * pow(intSpec, mat.shininess);
 			}
-		colorPoint += intensity * mat.diffuse * 0.5+ spec;
-		if(texMode == 0) // modulate diffuse color with texel color
-		{
-			texel = texture(texmap2, DataIn.tex_coord);  // texel from lighwood.tga
-			colorOut = max(intensity * mat.diffuse * texel + spec,0.07 * texel);
-		}
-		else if (texMode == 2) // diffuse color is replaced by texel color, with specular area or ambient (0.1*texel)
-		{
-			texel = texture(texmap, DataIn.tex_coord);  // texel from stone.tga
-			colorOut = max(intensity*texel + spec, 0.07*texel);
-		}
-		else // multitexturing
-		{
-			texel = texture(texmap2, DataIn.tex_coord);  // texel from lighwood.tga
-			texel1 = texture(texmap1, DataIn.tex_coord);  // texel from checker.tga
-			colorOut = max(intensity*texel*texel1 + spec, 0.07*texel*texel1);
-		}
+		colorPoint += intensity * mat.diffuse * 0.5 + spec;
 		}
 	}
 
@@ -119,6 +144,23 @@ void main() {
 				att = pow(spotCos, spotExp);
 				intensity = max(dot(n,l), 0.0) * att;
 
+//				if (mat.texCount == 0) {
+					diff = mat.diffuse;
+					auxSpec = mat.specular;
+//				}
+//				else {
+//					if (diffMapCount == 0)
+//						diff = mat.diffuse;
+//					else if (diffMapCount == 1)
+//						diff = mat.diffuse * texture(texUnitDiff, DataIn.tex_coord);
+//					else
+//						diff = mat.diffuse * texture(texUnitDiff, DataIn.tex_coord) * texture(texUnitDiff1, DataIn.tex_coord);
+//				}
+//				if (specularMap)
+//					auxSpec = mat.specular * texture(texUnitSpec, DataIn.tex_coord);
+//				else
+					auxSpec = mat.specular;
+
 				if (intensity > 0.0) {
 					vec3 h = normalize(l + e);
 					float intSpec = max(dot(h,n), 0.0);
@@ -126,22 +168,6 @@ void main() {
 				}
 			}
 		colorSpot += intensity * mat.diffuse + spec;
-		if(texMode == 0) // modulate diffuse color with texel color
-		{
-			texel = texture(texmap2, DataIn.tex_coord);  // texel from lighwood.tga
-			colorOut = max(intensity * mat.diffuse * texel + spec,0.07 * texel);
-		}
-		else if (texMode == 2) // diffuse color is replaced by texel color, with specular area or ambient (0.1*texel)
-		{
-			texel = texture(texmap, DataIn.tex_coord);  // texel from stone.tga
-			colorOut = max(intensity*texel + spec, 0.07*texel);
-		}
-		else // multitexturing
-		{
-			texel = texture(texmap2, DataIn.tex_coord);  // texel from lighwood.tga
-			texel1 = texture(texmap1, DataIn.tex_coord);  // texel from checker.tga
-			colorOut = max(intensity*texel*texel1 + spec, 0.07*texel*texel1);
-		}
 		}
 	}
 	colorOut = clamp(colorAux + colorPoint + colorSpot, 0.0, 1.0);
