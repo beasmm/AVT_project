@@ -650,7 +650,6 @@ void renderScene(void) {
 	int buoy = 0;
 
 	// Associar os Texture Units aos Objects Texture
-	//stone.tga loaded in TU0; checker.tga loaded in TU1;  lightwood.tga loaded in TU2
 
 	glActiveTexture(GL_TEXTURE0);
 	glBindTexture(GL_TEXTURE_2D, TextureArray[0]);
@@ -1102,8 +1101,8 @@ void init()
 	cams[2].camPos[2] = -r;
 
 	glGenTextures(2, TextureArray);
-	Texture2D_Loader(TextureArray, "azure-blue-paint-diffusing-with-water.jpg", 0);
-	Texture2D_Loader(TextureArray, "clear-ocean-water-texture.jpg", 1);
+	Texture2D_Loader(TextureArray, "img/azure-blue-paint-diffusing-with-water.jpg", 0);
+	Texture2D_Loader(TextureArray, "img/clear-ocean-water-texture.jpg", 1);
 
 	// create geometry and VAO of the water plane
 	float amb0[] = { 0.2f, 0.3f, 0.7f, 1.0f };
@@ -1322,6 +1321,7 @@ void init()
 	glEnable(GL_DEPTH_TEST);
 	glEnable(GL_CULL_FACE);
 	glEnable(GL_MULTISAMPLE);
+	glDeleteTextures(2, TextureArray);
 	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 
 	initCams();
@@ -1347,6 +1347,10 @@ int main(int argc, char **argv) {
 	glutInitWindowPosition(100,100);
 	glutInitWindowSize(WinX, WinY);
 	WindowHandle = glutCreateWindow(CAPTION);
+
+	//glEnable(GL_BLEND); //TRANS
+	//glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);  //TRANS
+
 
 
 //  Callback Registration
