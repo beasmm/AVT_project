@@ -46,7 +46,7 @@
 
 using namespace std;
 
-#define CAPTION "AVT Demo: Phong Shading and Text rendered with FreeType"
+#define CAPTION "AVT 2024/25 project"
 int WindowHandle = 0;
 int WinX = 1024, WinY = 768;
 
@@ -122,10 +122,12 @@ public:
 	bool left_paddle_working = false;
 	bool right_paddle_working = false;
 	int paddle_angle = 0;
+	int lives = 5;
 	OBB boatOBB;
 };
 
 Boat boat;
+int play_time = 0;
 
 const int maxFish = 10; //Numero Maximo de Peixes
 const float maxDistance = 20.0f; //Distancia a que podem tar do barco
@@ -176,6 +178,8 @@ bool pointLightsOn = false;
 bool spotLightsOn = false;
 float coneDir[4] = { 0.0f, 0.0f, 1.0f, 0.0f };
 bool fogEffectOn = false;
+
+bool isPaused = false;
 
 // Mouse Tracking Variables
 int startX, startY, tracking = 0;
@@ -318,6 +322,12 @@ OBB createOBB(float position[3], float halfSize[3]) {
 	return OBB;
 }
 
+void resetGame() {
+	resetBoat();
+	play_time = 0;
+	boat.lives = 5;
+}
+
 
 void setupPointLightPos() {
 	for (int i = 0; i < 6; i++) {
@@ -333,6 +343,8 @@ void timer(int value)
 	std::ostringstream oss;
 	oss << CAPTION << ": " << FrameCount << " FPS @ (" << WinX << "x" << WinY << ")";
 	std::string s = oss.str();
+
+	play_time++;
 
 	glutSetWindow(WindowHandle);
 	glutSetWindowTitle(s.c_str());
@@ -399,6 +411,9 @@ void spawnFish(float boatPos[3]) {
 void fishCollision(AABB boatAABB, AABB fishAABB) {
 	if (isColliding(boatAABB, fishAABB)) {
 		resetBoat();
+		boat.lives -= 1;
+		if (boat.lives == 0) 
+			resetGame();
 	}
 }
 
@@ -433,7 +448,13 @@ void updateFish(float boatPos[3]) {
 
 void refresh(int value)
 {
-	AABB boatAABB = calculateAABBFromOBB(boat.boatOBB);
+
+	if (isPaused) {
+		glutPostRedisplay();
+		glutTimerFunc(1000 / 60, refresh, 0);
+		return;
+	}
+
 	if (boat.left_paddle_working || boat.right_paddle_working) {
 		if (boat.speed <= 1 && boat.paddle_direction == 1)
 			boat.speed += 0.1 * boat.paddle_strength;
@@ -458,6 +479,7 @@ void refresh(int value)
 	else if (boat.speed < 0) boat.speed += speed_decay;
 
 	if (boat.speed != 0) {
+		AABB boatAABB = calculateAABBFromOBB(boat.boatOBB);
 		spotLightPos[0][0] = boat.position[0] + 0.8f * sin(angle_rad - spotLightAngle);
 		spotLightPos[0][2] = boat.position[2] + 0.8f * cos(angle_rad);
 		spotLightPos[1][0] = boat.position[0] + 0.8f * sin(angle_rad + spotLightAngle);
@@ -469,25 +491,26 @@ void refresh(int value)
 
 		cams[2].camPos[0] = boat.position[0] - r * sin(angle_rad);
 		cams[2].camPos[2] = boat.position[2] - r * cos(angle_rad) ;
-	}
 
-
-	cams[2].camTarget[0] = boat.position[0];
-	cams[2].camTarget[1] = 0.0f;
-	cams[2].camTarget[2] = boat.position[2];
+		cams[2].camTarget[0] = boat.position[0];
+		cams[2].camTarget[1] = 0.0f;
+		cams[2].camTarget[2] = boat.position[2];
 
 	
-	if (isCollidingWithIsland(boatAABB)) {
-		boat.speed = 0.0;
+		if (isCollidingWithIsland(boatAABB)) {
+			boat.speed = 0.0;
 
-	}
-	else {	
-		for (int i = 0; i < 6; i++) {
-			if (isCollidingWithBuoy(boatAABB, i)) {
-				boat.speed = 0.0;
+		}
+		else {	
+			for (int i = 0; i < 6; i++) {
+				if (isCollidingWithBuoy(boatAABB, i)) {
+					boat.speed = 0.0;
+				}
 			}
 		}
 	}
+
+
 
 	glutPostRedisplay();
 	glutTimerFunc(1000 / 60, refresh, 0);
@@ -558,6 +581,49 @@ void renderFish() {
 //
 // Render stufff
 //
+
+void renderHUD() {
+
+
+	//Render text (bitmap fonts) in screen coordinates. So use ortoghonal projection with viewport coordinates.
+	glDisable(GL_DEPTH_TEST);
+	//the glyph contains transparent background colors and non-transparent for the actual character pixels. So we use the blending
+	glEnable(GL_BLEND);
+	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+	int m_viewport[4];
+	glGetIntegerv(GL_VIEWPORT, m_viewport);
+	int windowWidth = glutGet(GLUT_WINDOW_WIDTH);
+	int windowHeight = glutGet(GLUT_WINDOW_HEIGHT);
+	float char_width = 0.0f;
+	float char_height = 0.0f;
+	// Initialization of freetype library with font_name file
+	freeType_init("fonts/PixelGame-R9AZe.otf", 0, 84, char_width, char_height);
+	pushMatrix(MODEL);
+	loadIdentity(MODEL);
+	pushMatrix(PROJECTION);
+	glGetIntegerv(GL_VIEWPORT, m_viewport);
+	// switch to orthogonal projection
+	loadIdentity(PROJECTION);
+	pushMatrix(VIEW);
+	loadIdentity(VIEW);
+	ortho(m_viewport[0], m_viewport[0] + m_viewport[2] - 1, m_viewport[1], m_viewport[1] + m_viewport[3] - 1, -1, 1);
+	RenderText(shaderText, "TIME: " + std::to_string(play_time), 0.0f, windowHeight - char_height / 2.0f, 0.5f, 1.0f, 1.0f, 1.0f);
+	float xPos = windowWidth - TextWidth("LIVES: ", 0.5f, char_width);
+	RenderText(shaderText, "LIVES: " + std::to_string(boat.lives), xPos, windowHeight - char_height / 2.0f, 0.5f, 1.0f, 1.0f, 1.0f);
+	if (isPaused) {
+		xPos = windowWidth / 2.0f - (TextWidth("PAUSED", 0.5f, char_width) / 2.0f);
+		float yPos = windowHeight / 2.0f;
+		RenderText(shaderText, "PAUSED", xPos, yPos, 1.0f, 1.0f, 0.0f, 0.0f);
+	}
+	popMatrix(PROJECTION);
+	popMatrix(VIEW);
+	popMatrix(MODEL);
+	glEnable(GL_DEPTH_TEST);
+	glDisable(GL_BLEND);
+}
+
+
 
 void renderScene(void) {
 
@@ -780,30 +846,7 @@ void renderScene(void) {
 		
 	}
 	renderFish();
-
-	//Render text (bitmap fonts) in screen coordinates. So use ortoghonal projection with viewport coordinates.
-	glDisable(GL_DEPTH_TEST);
-	//the glyph contains transparent background colors and non-transparent for the actual character pixels. So we use the blending
-	glEnable(GL_BLEND);  
-	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-	int m_viewport[4];
-	glGetIntegerv(GL_VIEWPORT, m_viewport);
-
-	//viewer at origin looking down at  negative z direction
-	pushMatrix(MODEL);
-	loadIdentity(MODEL);
-	pushMatrix(PROJECTION);
-	loadIdentity(PROJECTION);
-	pushMatrix(VIEW);
-	loadIdentity(VIEW);
-	ortho(m_viewport[0], m_viewport[0] + m_viewport[2] - 1, m_viewport[1], m_viewport[1] + m_viewport[3] - 1, -1, 1);
-	RenderText(shaderText, "This is a sample text", 25.0f, 25.0f, 1.0f, 0.5f, 0.8f, 0.2f);
-	RenderText(shaderText, "AVT Light and Text Rendering Demo", 440.0f, 570.0f, 0.5f, 0.3, 0.7f, 0.9f);
-	popMatrix(PROJECTION);
-	popMatrix(VIEW);
-	popMatrix(MODEL);
-	glEnable(GL_DEPTH_TEST);
-	glDisable(GL_BLEND);
+	renderHUD();
 
 	glutSwapBuffers();
 }
@@ -832,16 +875,20 @@ void processKeys(unsigned char key, int xx, int yy)
 		case '3': active = 2; break;
 
 		case 'a':
+			if (isPaused) break;
 			boat.right_paddle_working = true;
 			break;
 		case 'd':
+			if (isPaused) break;
 			boat.left_paddle_working = true;
 			break;
 		case 's':
+			if (isPaused) break;
 			if (boat.paddle_direction == 1) boat.paddle_direction = 0;
 			else boat.paddle_direction = 1;
 			break;
 		case 'o':
+			if (isPaused) break;
 			if (boat.paddle_strength == 1) boat.paddle_strength = 2;
 			else boat.paddle_strength = 1;
 			break; 
@@ -884,6 +931,14 @@ void processKeys(unsigned char key, int xx, int yy)
 				isDay = false;
 				printf("Day lights disabled.\n");
 			}
+			break;
+
+		case 'p':
+			isPaused = !isPaused;
+			break;
+
+		case 'r':
+			resetGame();
 			break;
 	}
 }
@@ -1089,9 +1144,6 @@ void init()
 		exit(0);
 	}
 	ilInit();
-
-	/// Initialization of freetype library with font_name file
-	freeType_init(font_name);
 
 	// set the camera position based on its spherical coordinates
 
