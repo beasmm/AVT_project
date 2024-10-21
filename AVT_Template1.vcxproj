@@ -169,6 +169,7 @@
     <ClInclude Include="avtFreeType.h" />
     <ClInclude Include="AVTmathLib.h" />
     <ClInclude Include="cube.h" />
+    <ClInclude Include="flare.h" />
     <ClInclude Include="ft2build.h" />
     <ClInclude Include="geometry.h" />
     <ClInclude Include="Texture_Loader.h" />
