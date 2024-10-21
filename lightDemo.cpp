@@ -35,7 +35,7 @@
 #include "VertexAttrDef.h"
 #include "geometry.h"
 #include "Texture_Loader.h"
-
+#include "flare.h"
 #include "avtFreeType.h"
 
 #define ORTHOGONAL 0
@@ -61,7 +61,7 @@ const string font_name = "fonts/arial.ttf";
 
 //Vector with meshes
 vector<struct MyMesh> myMeshes;
-
+vector<struct MyMesh> flareMeshes;
 vector<struct MyMesh> fishMeshes;
 
 //active camera variable
@@ -83,9 +83,22 @@ GLint lPos_uniformId[8];
 GLint lightEnabledId;
 GLuint TextureArray[2];
 GLint texMode_uniformId;
+GLint flareEffectOnId;
+
+GLint tex_loc, tex_loc1, tex_loc2, tex_flare;
 
 
-GLint tex_loc, tex_loc1, tex_loc2;
+// CALCULATIONS 
+
+inline double clamp(const double x, const double min, const double max) {
+	return (x < min ? min : (x > max ? max : x));
+}
+
+inline int clampi(const int x, const int min, const int max) {
+	return (x < min ? min : (x > max ? max : x));
+}
+// ------------------------------------------------------------
+
 
 class AABB {
 public:
@@ -178,6 +191,12 @@ bool pointLightsOn = false;
 bool spotLightsOn = false;
 float coneDir[4] = { 0.0f, 0.0f, 1.0f, 0.0f };
 bool fogEffectOn = false;
+bool flareEffectOn = false;
+
+//Flare effect 
+FLARE_DEF AVTflare;
+float lightScreenPos[3];
+GLuint FlareTextureArray[5];
 
 bool isPaused = false;
 
@@ -387,7 +406,7 @@ void spawnFish(float boatPos[3]) {
 		std::random_device rd;  // Obtain a random number from hardware
 		std::mt19937 gen(rd()); // Seed the generator
 
-		std::uniform_real_distribution<double> dis(0.0, 360.0); // Distribution in the range [0, 360)
+		std::uniform_real_distribution<double> dis(0.0, 360.0); // Distribution in the range [0, 360]
 
 		// Generate a random angle
 		double random_angle = dis(gen);
@@ -538,6 +557,11 @@ void changeSize(int w, int h) {
 
 // Render the fish
 void renderFish() {
+	glDisable(GL_DEPTH_TEST);
+	glDisable(GL_CULL_FACE);
+	glEnable(GL_BLEND);
+	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
 	GLint loc;
 	int randomFish = rand() % 3;
 
@@ -575,6 +599,10 @@ void renderFish() {
 
 		popMatrix(MODEL);
 	}
+
+	glEnable(GL_DEPTH_TEST);
+	glEnable(GL_CULL_FACE);
+	glDisable(GL_BLEND);
 }
 
 // ------------------------------------------------------------
@@ -582,8 +610,95 @@ void renderFish() {
 // Render stufff
 //
 
-void renderHUD() {
+void renderFlare(FLARE_DEF* flare, int lx, int ly, int* m_viewport) {  //lx, ly represent the projected position of light on viewport
 
+	int     dx, dy;          // Screen coordinates of "destination"
+	int     px, py;          // Screen coordinates of flare element
+	int		cx, cy;
+	float    maxflaredist, flaredist, flaremaxsize, flarescale, scaleDistance;
+	int     width, height, alpha;    // Piece parameters;
+	int     i;
+	float	diffuse[4];
+
+	GLint loc;
+
+	glDisable(GL_DEPTH_TEST);
+	glDisable(GL_CULL_FACE);
+	glEnable(GL_BLEND);
+	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+	int screenMaxCoordX = m_viewport[0] + m_viewport[2] - 1;
+	int screenMaxCoordY = m_viewport[1] + m_viewport[3] - 1;
+
+	//viewport center
+	cx = m_viewport[0] + (int)(0.5f * (float)m_viewport[2]) - 1;
+	cy = m_viewport[1] + (int)(0.5f * (float)m_viewport[3]) - 1;
+
+	// Compute how far off-center the flare source is.
+	maxflaredist = sqrt(cx * cx + cy * cy);
+	flaredist = sqrt((lx - cx) * (lx - cx) + (ly - cy) * (ly - cy));
+	scaleDistance = (maxflaredist - flaredist) / maxflaredist;
+	flaremaxsize = (int)(m_viewport[2] * flare->fMaxSize);
+	flarescale = (int)(m_viewport[2] * flare->fScale);
+
+	// Destination is opposite side of centre from source
+	dx = clampi(cx + (cx - lx), m_viewport[0], screenMaxCoordX);
+	dy = clampi(cy + (cy - ly), m_viewport[1], screenMaxCoordY);
+
+	// Render each element. To be used Texture Unit 0
+
+	// glUniform1i(flareEffectOnId, 1); // draw modulated textured particles 
+	glUniform1i(tex_flare, 0);  //use TU 0
+
+	for (i = 0; i < flare->nPieces; ++i)
+	{
+		// Position is interpolated along line between start and destination.
+		px = (int)((1.0f - flare->element[i].fDistance) * lx + flare->element[i].fDistance * dx);
+		py = (int)((1.0f - flare->element[i].fDistance) * ly + flare->element[i].fDistance * dy);
+		px = clampi(px, m_viewport[0], screenMaxCoordX);
+		py = clampi(py, m_viewport[1], screenMaxCoordY);
+
+		// Piece size are 0 to 1; flare size is proportion of screen width; scale by flaredist/maxflaredist.
+		width = (int)(scaleDistance * flarescale * flare->element[i].fSize);
+
+		// Width gets clamped, to allows the off-axis flaresto keep a good size without letting the elements get big when centered.
+		if (width > flaremaxsize)  width = flaremaxsize;
+
+		height = (int)((float)m_viewport[3] / (float)m_viewport[2] * (float)width);
+		memcpy(diffuse, flare->element[i].matDiffuse, 4 * sizeof(float));
+		diffuse[3] *= scaleDistance;   //scale the alpha channel
+
+		if (width > 1)
+		{
+			// send the material - diffuse color modulated with texture
+			loc = glGetUniformLocation(shader.getProgramIndex(), "mat.diffuse");
+			glUniform4fv(loc, 1, diffuse);
+
+			glActiveTexture(GL_TEXTURE0);
+			glBindTexture(GL_TEXTURE_2D, FlareTextureArray[flare->element[i].textureId]);
+
+			pushMatrix(MODEL);
+			translate(MODEL, (float)(px - width * 0.0f), (float)(py - height * 0.0f), 0.0f);
+			scale(MODEL, (float)width, (float)height, 1);
+			computeDerivedMatrix(PROJ_VIEW_MODEL);
+			glUniformMatrix4fv(vm_uniformId, 1, GL_FALSE, mCompMatrix[VIEW_MODEL]);
+			glUniformMatrix4fv(pvm_uniformId, 1, GL_FALSE, mCompMatrix[PROJ_VIEW_MODEL]);
+			computeNormalMatrix3x3();
+			glUniformMatrix3fv(normal_uniformId, 1, GL_FALSE, mNormal3x3);
+
+			glBindVertexArray(myMeshes[19].vao);
+			glDrawElements(myMeshes[19].type, myMeshes[19].numIndexes, GL_UNSIGNED_INT, 0);
+			glBindVertexArray(0);
+			popMatrix(MODEL);
+		}
+	}
+	glEnable(GL_DEPTH_TEST);
+	glEnable(GL_CULL_FACE);
+	glDisable(GL_BLEND);
+}
+
+
+void renderHUD() {
 
 	//Render text (bitmap fonts) in screen coordinates. So use ortoghonal projection with viewport coordinates.
 	glDisable(GL_DEPTH_TEST);
@@ -622,7 +737,6 @@ void renderHUD() {
 	glEnable(GL_DEPTH_TEST);
 	glDisable(GL_BLEND);
 }
-
 
 
 void renderScene(void) {
@@ -726,8 +840,41 @@ void renderScene(void) {
 
 
 	//Indicar aos tres samplers do GLSL quais os Texture Units a serem usados
-	glUniform1i(tex_loc, 0);
+	/*glUniform1i(tex_loc, 0);*/
 	glUniform1i(tex_loc1, 1);
+
+
+	loc = glGetUniformLocation(shader.getProgramIndex(), "flareEffectOn");
+	if (flareEffectOn) {
+		int flarePos[2];
+		int m_viewport[4];
+
+		glUniform1i(loc, 1);
+
+		glGetIntegerv(GL_VIEWPORT, m_viewport);
+
+		pushMatrix(MODEL);
+		loadIdentity(MODEL);
+		computeDerivedMatrix(PROJ_VIEW_MODEL);  //pvm to be applied to lightPost. pvm is used in project function
+
+		if (!project(lightPos, lightScreenPos, m_viewport))
+			printf("Error in getting projected light in screen\n");  //Calculate the window Coordinates of the light position: the projected position of light on viewport
+		flarePos[0] = clampi((int)lightScreenPos[0], m_viewport[0], m_viewport[0] + m_viewport[2] - 1);
+		flarePos[1] = clampi((int)lightScreenPos[1], m_viewport[1], m_viewport[1] + m_viewport[3] - 1);
+		popMatrix(MODEL);
+
+		//viewer looking down at  negative z direction
+		pushMatrix(PROJECTION);
+		loadIdentity(PROJECTION);
+		pushMatrix(VIEW);
+		loadIdentity(VIEW);
+		ortho(m_viewport[0], m_viewport[0] + m_viewport[2] - 1, m_viewport[1], m_viewport[1] + m_viewport[3] - 1, -1, 1);
+		renderFlare(&AVTflare, flarePos[0], flarePos[1], m_viewport);
+		popMatrix(PROJECTION);
+		popMatrix(VIEW);
+	}
+	else
+		glUniform1i(loc, 0);
 
 	for (int i = 0 ; i < 19; ++i) {
 
@@ -837,7 +984,7 @@ void renderScene(void) {
 
 		// Render mesh
 		glBindVertexArray(myMeshes[objId].vao);
-			
+		glUniform1i(texMode_uniformId, 0);
 		glDrawElements(myMeshes[objId].type, myMeshes[objId].numIndexes, GL_UNSIGNED_INT, 0);
 		glBindVertexArray(0);
 
@@ -902,6 +1049,17 @@ void processKeys(unsigned char key, int xx, int yy)
 				printf("Fog effect disabled.\n");
 			}
 			break;
+		case 'g':
+			if (flareEffectOn == false && isDay == true) {
+				flareEffectOn = true;
+				printf("Flare effect enabled.\n");
+			}
+			else {
+				flareEffectOn = false;
+				glUniform1i(flareEffectOnId, 0);
+				printf("Flare effect disabled.\n");
+			}
+			break;
 		case 'c': 
 			if (pointLightsOn == false) {
 				pointLightsOn = true;
@@ -909,6 +1067,7 @@ void processKeys(unsigned char key, int xx, int yy)
 			}
 			else {
 				pointLightsOn = false;
+				flareEffectOn = false;
 				printf("Point lights disabled.\n");
 			}
 			break;
@@ -1062,7 +1221,7 @@ GLuint setupShaders() {
 	glBindFragDataLocation(shader.getProgramIndex(), 0,"colorOut");
 	glBindAttribLocation(shader.getProgramIndex(), VERTEX_COORD_ATTRIB, "position");
 	glBindAttribLocation(shader.getProgramIndex(), NORMAL_ATTRIB, "normal");
-	//glBindAttribLocation(shader.getProgramIndex(), TEXTURE_COORD_ATTRIB, "texCoord");
+	glBindAttribLocation(shader.getProgramIndex(), TEXTURE_COORD_ATTRIB, "texCoord");
 
 	glLinkProgram(shader.getProgramIndex());
 	printf("InfoLog for Model Rendering Shader\n%s\n\n", shaderText.getAllInfoLogs().c_str());
@@ -1097,6 +1256,7 @@ GLuint setupShaders() {
 	tex_loc = glGetUniformLocation(shader.getProgramIndex(), "texmap");
 	tex_loc1 = glGetUniformLocation(shader.getProgramIndex(), "texmap1");
 	tex_loc2 = glGetUniformLocation(shader.getProgramIndex(), "texmap2");
+	tex_flare = glGetUniformLocation(shader.getProgramIndex(), "tex_flare");
 	
 	printf("InfoLog for Per Fragment Phong Lightning Shader\n%s\n\n", shader.getAllInfoLogs().c_str());
 
@@ -1153,9 +1313,17 @@ void init()
 	cams[2].camPos[1] = r * sin(beta * 3.14f / 180.0f);
 	cams[2].camPos[2] = -r;
 
-	glGenTextures(2, TextureArray);
-	Texture2D_Loader(TextureArray, "azure-blue-paint-diffusing-with-water.jpg", 0);
-	Texture2D_Loader(TextureArray, "clear-ocean-water-texture.jpg", 1);
+	//glGenTextures(2, TextureArray);
+	//Texture2D_Loader(TextureArray, "azure-blue-paint-diffusing-with-water.jpg", 0);
+	//Texture2D_Loader(TextureArray, "clear-ocean-water-texture.jpg", 1);
+
+	//Flare elements textures
+	glGenTextures(5, FlareTextureArray);
+	Texture2D_Loader(FlareTextureArray, "crcl.tga", 0);
+	Texture2D_Loader(FlareTextureArray, "flar.tga", 1);
+	Texture2D_Loader(FlareTextureArray, "hxgn.tga", 2);
+	Texture2D_Loader(FlareTextureArray, "ring.tga", 3);
+	Texture2D_Loader(FlareTextureArray, "sun.tga", 4);
 
 	// create geometry and VAO of the water plane
 	float amb0[] = { 0.2f, 0.3f, 0.7f, 1.0f };
@@ -1367,8 +1535,15 @@ void init()
 	amesh.mat.shininess = shininess;
 	amesh.mat.texCount = texcount;
 	// for 6 buoys
-	for (int i = 0; i < 6; i++) myMeshes.push_back(amesh);
+	for (int i = 0; i < 6; i++) 
+		myMeshes.push_back(amesh);
 
+	// create geometry and VAO of the quad for flare elements
+	amesh = createQuad(1, 1);
+	myMeshes.push_back(amesh);
+
+	//Load flare from file
+	loadFlareFile(&AVTflare, "flare.txt");
 
 	//// some GL settings
 	glEnable(GL_DEPTH_TEST);
@@ -1441,4 +1616,61 @@ int main(int argc, char **argv) {
 	return(0);
 }
 
+unsigned int getTextureId(char* name) {
+	int i;
+
+	for (i = 0; i < NTEXTURES; ++i)
+	{
+		if (strncmp(name, flareTextureNames[i], strlen(name)) == 0)
+			return i;
+	}
+	return -1;
+}
+
+void    loadFlareFile(FLARE_DEF* flare, char* filename)
+{
+	int     n = 0;
+	FILE* f;
+	char    buf[256];
+	int fields;
+
+	memset(flare, 0, sizeof(FLARE_DEF));
+
+	f = fopen(filename, "r");
+	if (f)
+	{
+		fgets(buf, sizeof(buf), f);
+		sscanf(buf, "%f %f", &flare->fScale, &flare->fMaxSize);
+
+		while (!feof(f))
+		{
+			char            name[8] = { '\0', };
+			double          dDist = 0.0, dSize = 0.0;
+			float			color[4];
+			int				id;
+
+			fgets(buf, sizeof(buf), f);
+			fields = sscanf(buf, "%4s %lf %lf ( %f %f %f %f )", name, &dDist, &dSize, &color[3], &color[0], &color[1], &color[2]);
+			if (fields == 7)
+			{
+				for (int i = 0; i < 4; ++i) {
+					color[i] = clamp(color[i] / 255.0f, 0.0f, 1.0f);
+					printf("%f index %i\n", color[i], i);
+				}
+				id = getTextureId(name);
+				if (id < 0) printf("Texture name not recognized\n");
+				else
+					flare->element[n].textureId = id;
+				flare->element[n].fDistance = (float)dDist;
+				flare->element[n].fSize = (float)dSize;
+				memcpy(flare->element[n].matDiffuse, color, 4 * sizeof(float));
+				++n;
+			}
+		}
+
+		flare->nPieces = n;
+		fclose(f);
+	}
+	else printf("Flare file opening error\n");
+}
 
