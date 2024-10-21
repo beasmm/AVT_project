@@ -67,9 +67,7 @@ void main() {
 			float intSpec = max(dot(h, n), 0.0);
 			spec = mat.specular * pow(intSpec, mat.shininess);
 		}
-		colorAux = max(intensity *  mat.diffuse + spec, mat.ambient);
 
-		//colorAux += max(intensity *  mat.diffuse + spec, mat.ambient);
 		if(texMode == 0) {
 			colorAux += max(intensity *  mat.diffuse + spec, mat.ambient);
 		}
@@ -78,14 +76,27 @@ void main() {
 			texel1 = texture(texmap1, DataIn.tex_coord);
 			colorAux += max(intensity*texel*texel1 + spec, 0.07*texel*texel1);
 		}
-		if (flareEffectOn == true) {
-			texel = texture(tex_flare, DataIn.tex_coord);  //texel from element flare texture
+		else if (texMode == 2) {
+			texel = texture(texmap, DataIn.tex_coord);  //texel from element flare texture
 			if((texel.a == 0.0)  || (mat.diffuse.a == 0.0) ) discard;
 			else
 				colorAux += mat.diffuse * texel;
 		}
+	} else {
+		if (texMode == 1) {
+			texel = texture(texmap, DataIn.tex_coord); 
+			texel1 = texture(texmap1, DataIn.tex_coord);
+			colorAux += 0.07*texel*texel1;
+		}
+		else if (texMode == 2) {
+			texel = texture(texmap, DataIn.tex_coord);  //texel from element flare texture
+			if((texel.a == 0.0)  || (mat.diffuse.a == 0.0) ) discard;
+			else
+				colorAux += mat.diffuse * texel;
+		}
+
 	}
-		
+
 	if (pointLightsOn == true) { // pointlights are on
 		for (int i = 0; i < 6; i++){
 			vec3 l = normalize(DataIn.lightDir[i]);
@@ -104,7 +115,12 @@ void main() {
 				texel1 = texture(texmap1, DataIn.tex_coord);
 				colorPoint += max(intensity*texel*texel1 + spec, 0.07*texel*texel1);
 			}
-		colorPoint += intensity * mat.diffuse * 0.5 + spec;
+			else if (texMode == 2) {
+				texel = texture(texmap, DataIn.tex_coord);  //texel from element flare texture
+				if((texel.a == 0.0)  || (mat.diffuse.a == 0.0) ) discard;
+				else
+					colorPoint += mat.diffuse * texel;
+			}
 		}
 	}
 
@@ -123,14 +139,20 @@ void main() {
 					vec3 h = normalize(l + e);
 					float intSpec = max(dot(h,n), 0.0);
 					spec = mat.specular * pow(intSpec, mat.shininess) * att;
-					if(texMode == 0) {
-						colorSpot += intensity * mat.diffuse + spec;
-					}
-					else if (texMode == 1) {
-						texel = texture(texmap, DataIn.tex_coord);  
-						texel1 = texture(texmap1, DataIn.tex_coord); 
-						colorSpot += max(intensity*texel*texel1 + spec, 0.07*texel*texel1);
-					}
+				}
+				if(texMode == 0) {
+					colorSpot += intensity * mat.diffuse + spec;
+				}
+				else if (texMode == 1) {
+					texel = texture(texmap, DataIn.tex_coord);  
+					texel1 = texture(texmap1, DataIn.tex_coord); 
+					colorSpot += max(intensity*texel*texel1 + spec, 0.07*texel*texel1);
+				}
+				else if (texMode == 2) {
+					texel = texture(texmap, DataIn.tex_coord);  //texel from element flare texture
+					if((texel.a == 0.0)  || (mat.diffuse.a == 0.0) ) discard;
+					else
+						colorSpot += mat.diffuse * texel;
 				}
 			}
 		}
@@ -144,6 +166,6 @@ void main() {
 		float fogAmount = exp(-dist*0.05);
 		vec3 fogColor = vec3( 0.5, 0.6, 0.7);
 		vec3 finalColor = mix(colorOut.rgb, fogColor, fogAmount);
-		//colorOut = vec4(finalColor, 1.0);
+		colorOut = vec4(finalColor, 1.0);
 	}
 }

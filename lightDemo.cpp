@@ -646,8 +646,8 @@ void renderFlare(FLARE_DEF* flare, int lx, int ly, int* m_viewport) {  //lx, ly 
 
 	// Render each element. To be used Texture Unit 0
 
-	// glUniform1i(flareEffectOnId, 1); // draw modulated textured particles 
-	glUniform1i(tex_flare, 0);  //use TU 0
+	glUniform1i(texMode_uniformId, 2); // draw modulated textured particles 
+	glUniform1i(tex_loc, 0);  //use TU 0
 
 	for (i = 0; i < flare->nPieces; ++i)
 	{
@@ -824,8 +824,6 @@ void renderScene(void) {
 	multMatrixPoint(VIEW, coneDir, res);
 	glUniform4fv(loc, 1, res);
 
-	int objId=0; //id of the object mesh - to be used as index of mesh: Mymeshes[objID] means the current mesh
-
 	int buoy = 0;
 
 	// Associar os Texture Units aos Objects Texture
@@ -841,51 +839,17 @@ void renderScene(void) {
 	glUniform1i(tex_loc, 0);
 	glUniform1i(tex_loc1, 1);
 
-	for (int i = 0 ; i < 19; i++) {
-
-	loc = glGetUniformLocation(shader.getProgramIndex(), "flareEffectOn");
-	if (flareEffectOn) {
-		int flarePos[2];
-		int m_viewport[4];
-
-		glUniform1i(loc, 1);
-
-		glGetIntegerv(GL_VIEWPORT, m_viewport);
-
-		pushMatrix(MODEL);
-		loadIdentity(MODEL);
-		computeDerivedMatrix(PROJ_VIEW_MODEL);  //pvm to be applied to lightPost. pvm is used in project function
-
-		if (!project(lightPos, lightScreenPos, m_viewport))
-			printf("Error in getting projected light in screen\n");  //Calculate the window Coordinates of the light position: the projected position of light on viewport
-		flarePos[0] = clampi((int)lightScreenPos[0], m_viewport[0], m_viewport[0] + m_viewport[2] - 1);
-		flarePos[1] = clampi((int)lightScreenPos[1], m_viewport[1], m_viewport[1] + m_viewport[3] - 1);
-		popMatrix(MODEL);
-
-		//viewer looking down at  negative z direction
-		pushMatrix(PROJECTION);
-		loadIdentity(PROJECTION);
-		pushMatrix(VIEW);
-		loadIdentity(VIEW);
-		ortho(m_viewport[0], m_viewport[0] + m_viewport[2] - 1, m_viewport[1], m_viewport[1] + m_viewport[3] - 1, -1, 1);
-		renderFlare(&AVTflare, flarePos[0], flarePos[1], m_viewport);
-		popMatrix(PROJECTION);
-		popMatrix(VIEW);
-	}
-	else
-		glUniform1i(loc, 0);
-
-	for (int i = 0 ; i < 19; ++i) {
+	for (int i = 0; i < 19; ++i) {
 
 		// send the material
 		loc = glGetUniformLocation(shader.getProgramIndex(), "mat.ambient");
-		glUniform4fv(loc, 1, myMeshes[objId].mat.ambient);
+		glUniform4fv(loc, 1, myMeshes[i].mat.ambient);
 		loc = glGetUniformLocation(shader.getProgramIndex(), "mat.diffuse");
-		glUniform4fv(loc, 1, myMeshes[objId].mat.diffuse);
+		glUniform4fv(loc, 1, myMeshes[i].mat.diffuse);
 		loc = glGetUniformLocation(shader.getProgramIndex(), "mat.specular");
-		glUniform4fv(loc, 1, myMeshes[objId].mat.specular);
+		glUniform4fv(loc, 1, myMeshes[i].mat.specular);
 		loc = glGetUniformLocation(shader.getProgramIndex(), "mat.shininess");
-		glUniform1f(loc, myMeshes[objId].mat.shininess);
+		glUniform1f(loc, myMeshes[i].mat.shininess);
 		pushMatrix(MODEL);
 
 		//if (i == 0) translate(MODEL, 0.0f, -0.01f, 0.0f);
@@ -920,14 +884,14 @@ void renderScene(void) {
 		if (i == 10) { // left row handle
 			translate(MODEL, boat.position[0], 0.15f, boat.position[2]);
 			rotate(MODEL, boat.angle, 0, 1, 0);
-			if (boat.left_paddle_working && boat.paddle_direction == 1)	
+			if (boat.left_paddle_working && boat.paddle_direction == 1)
 				rotate(MODEL, boat.paddle_angle, 1, 0, 0);
 			else if (boat.left_paddle_working && boat.paddle_direction == 0)
 				rotate(MODEL, -boat.paddle_angle, 1, 0, 0);
 			translate(MODEL, -0.3f, 0.0f, 0.0f);
 			rotate(MODEL, -45, 0, 0, 1);
 		}
-		if (i == 9 ) { // right row handle
+		if (i == 9) { // right row handle
 			translate(MODEL, boat.position[0], 0.15f, boat.position[2]);
 			rotate(MODEL, boat.angle, 0, 1, 0);
 			if (boat.right_paddle_working && boat.paddle_direction == 1)
@@ -942,7 +906,7 @@ void renderScene(void) {
 			rotate(MODEL, boat.angle, 0, 1, 0);
 			translate(MODEL, 0.0f, 0.15f, 0.0f);
 			if (boat.left_paddle_working && boat.paddle_direction == 1)
-				rotate(MODEL,boat.paddle_angle, 1, 0, 0);
+				rotate(MODEL, boat.paddle_angle, 1, 0, 0);
 			else if (boat.left_paddle_working && boat.paddle_direction == 0)
 				rotate(MODEL, -boat.paddle_angle, 1, 0, 0);
 			rotate(MODEL, 180, 1, 0, 0);
@@ -963,7 +927,7 @@ void renderScene(void) {
 			rotate(MODEL, -45, 0, 0, 1);
 			scale(MODEL, 0.1f, 0.15f, 0.05f);
 		}
-		
+
 		if (i > 12) {
 			translate(MODEL, buoy_positions[buoy][0], 0.0f, buoy_positions[buoy][1]);
 			buoy++;
@@ -983,17 +947,43 @@ void renderScene(void) {
 			glUniform1i(texMode_uniformId, 1);
 		}
 		else glUniform1i(texMode_uniformId, 0);
-			
+
 		glDrawElements(myMeshes[i].type, myMeshes[i].numIndexes, GL_UNSIGNED_INT, 0);
 		glBindVertexArray(0);
 
 		popMatrix(MODEL);
-		objId++;
-		
 	}
 	renderFish();
+
+	if (flareEffectOn) {
+		int flarePos[2];
+		int m_viewport[4];
+		glGetIntegerv(GL_VIEWPORT, m_viewport);
+
+		pushMatrix(MODEL);
+		loadIdentity(MODEL);
+		computeDerivedMatrix(PROJ_VIEW_MODEL);  //pvm to be applied to lightPost. pvm is used in project function
+
+		if (!project(lightPos, lightScreenPos, m_viewport))
+			printf("Error in getting projected light in screen\n");  //Calculate the window Coordinates of the light position: the projected position of light on viewport
+		flarePos[0] = clampi((int)lightScreenPos[0], m_viewport[0], m_viewport[0] + m_viewport[2] - 1);
+		flarePos[1] = clampi((int)lightScreenPos[1], m_viewport[1], m_viewport[1] + m_viewport[3] - 1);
+		popMatrix(MODEL);
+
+		//viewer looking down at  negative z direction
+		pushMatrix(PROJECTION);
+		loadIdentity(PROJECTION);
+		pushMatrix(VIEW);
+		loadIdentity(VIEW);
+		ortho(m_viewport[0], m_viewport[0] + m_viewport[2] - 1, m_viewport[1], m_viewport[1] + m_viewport[3] - 1, -1, 1);
+		renderFlare(&AVTflare, flarePos[0], flarePos[1], m_viewport);
+		popMatrix(PROJECTION);
+		popMatrix(VIEW);
+	}
+
 	renderHUD();
 
+	glBindTexture(GL_TEXTURE_2D, 0);
 	glutSwapBuffers();
 }
 
@@ -1055,7 +1045,6 @@ void processKeys(unsigned char key, int xx, int yy)
 			}
 			else {
 				flareEffectOn = false;
-				glUniform1i(flareEffectOnId, 0);
 				printf("Flare effect disabled.\n");
 			}
 			break;
@@ -1544,7 +1533,7 @@ void init()
 	//Load flare from file
 	loadFlareFile(&AVTflare, "flare.txt");
 
-	//// some GL settings
+	// some GL settings
 	glEnable(GL_DEPTH_TEST);
 	glEnable(GL_CULL_FACE);
 	glEnable(GL_MULTISAMPLE);
@@ -1659,7 +1648,6 @@ void    loadFlareFile(FLARE_DEF* flare, char* filename)
 			{
 				for (int i = 0; i < 4; ++i) {
 					color[i] = clamp(color[i] / 255.0f, 0.0f, 1.0f);
-					printf("%f index %i\n", color[i], i);
 				}
 				id = getTextureId(name);
 				if (id < 0) printf("Texture name not recognized\n");
