@@ -530,7 +530,6 @@ void refresh(int value)
 	}
 
 
-
 	glutPostRedisplay();
 	glutTimerFunc(1000 / 60, refresh, 0);
 }
@@ -830,7 +829,6 @@ void renderScene(void) {
 	int buoy = 0;
 
 	// Associar os Texture Units aos Objects Texture
-	//stone.tga loaded in TU0; checker.tga loaded in TU1;  lightwood.tga loaded in TU2
 
 	glActiveTexture(GL_TEXTURE0);
 	glBindTexture(GL_TEXTURE_2D, TextureArray[0]);
@@ -840,9 +838,10 @@ void renderScene(void) {
 
 
 	//Indicar aos tres samplers do GLSL quais os Texture Units a serem usados
-	/*glUniform1i(tex_loc, 0);*/
+	glUniform1i(tex_loc, 0);
 	glUniform1i(tex_loc1, 1);
 
+	for (int i = 0 ; i < 19; i++) {
 
 	loc = glGetUniformLocation(shader.getProgramIndex(), "flareEffectOn");
 	if (flareEffectOn) {
@@ -889,11 +888,7 @@ void renderScene(void) {
 		glUniform1f(loc, myMeshes[objId].mat.shininess);
 		pushMatrix(MODEL);
 
-		if (i == 0) {
-			translate(MODEL, 0.0f, -0.01f, 0.0f);
-			glUniform1i(texMode_uniformId, 1);
-		}
-		else glUniform1d(texMode_uniformId, 0);
+		//if (i == 0) translate(MODEL, 0.0f, -0.01f, 0.0f);
 
 		if (i == 1) translate(MODEL, -10.0f, 0.01f, 0.0f); //island
 
@@ -983,9 +978,13 @@ void renderScene(void) {
 		glUniformMatrix3fv(normal_uniformId, 1, GL_FALSE, mNormal3x3);
 
 		// Render mesh
-		glBindVertexArray(myMeshes[objId].vao);
-		glUniform1i(texMode_uniformId, 0);
-		glDrawElements(myMeshes[objId].type, myMeshes[objId].numIndexes, GL_UNSIGNED_INT, 0);
+		glBindVertexArray(myMeshes[i].vao);
+		if (i == 0) {
+			glUniform1i(texMode_uniformId, 1);
+		}
+		else glUniform1i(texMode_uniformId, 0);
+			
+		glDrawElements(myMeshes[i].type, myMeshes[i].numIndexes, GL_UNSIGNED_INT, 0);
 		glBindVertexArray(0);
 
 		popMatrix(MODEL);
@@ -1313,9 +1312,9 @@ void init()
 	cams[2].camPos[1] = r * sin(beta * 3.14f / 180.0f);
 	cams[2].camPos[2] = -r;
 
-	//glGenTextures(2, TextureArray);
-	//Texture2D_Loader(TextureArray, "azure-blue-paint-diffusing-with-water.jpg", 0);
-	//Texture2D_Loader(TextureArray, "clear-ocean-water-texture.jpg", 1);
+	glGenTextures(2, TextureArray);
+	Texture2D_Loader(TextureArray, "img/azure-blue-paint-diffusing-with-water.jpg", 0);
+	Texture2D_Loader(TextureArray, "img/clear-ocean-water-texture.jpg", 1);
 
 	//Flare elements textures
 	glGenTextures(5, FlareTextureArray);
@@ -1549,6 +1548,7 @@ void init()
 	glEnable(GL_DEPTH_TEST);
 	glEnable(GL_CULL_FACE);
 	glEnable(GL_MULTISAMPLE);
+	//glDeleteTextures(2, TextureArray);
 	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 
 	initCams();
@@ -1574,6 +1574,10 @@ int main(int argc, char **argv) {
 	glutInitWindowPosition(100,100);
 	glutInitWindowSize(WinX, WinY);
 	WindowHandle = glutCreateWindow(CAPTION);
+
+	//glEnable(GL_BLEND); //TRANS
+	//glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);  //TRANS
+
 
 
 //  Callback Registration
