@@ -109,7 +109,10 @@ public:
 	int type = 0;
 };
 
-Camera cams[3];
+Camera cams[4];
+
+int rearviewX = 0, rearviewY = 0;
+int rearviewWidth = 0, rearviewHeight = 0;
 
 class Boat {
 public:
@@ -441,8 +444,6 @@ void updateFish(float boatPos[3]) {
 		fish.fishOBB.center[0] = fish.position[0];
 		fish.position[2] += fish.direction[1]*fish.speed;
 		fish.fishOBB.center[2] = fish.position[2];
-
-
 	}
 }
 
@@ -451,7 +452,7 @@ void refresh(int value)
 
 	if (isPaused) {
 		glutPostRedisplay();
-		glutTimerFunc(1000 / 60, refresh, 0);
+		glutTimerFunc(1000 / 100, refresh, 0);
 		return;
 	}
 
@@ -496,6 +497,14 @@ void refresh(int value)
 		cams[2].camTarget[1] = 0.0f;
 		cams[2].camTarget[2] = boat.position[2];
 
+		// rear camera
+		cams[3].camPos[0] = boat.position[0];
+		cams[3].camPos[1] = 1.0f;
+		cams[3].camPos[2] = boat.position[2] - 1.0f;
+
+		cams[3].camTarget[0] = boat.position[0] - r * sin(angle_rad);
+		cams[3].camTarget[2] = boat.position[2] - r * cos(angle_rad);
+
 	
 		if (isCollidingWithIsland(boatAABB)) {
 			boat.speed = 0.0;
@@ -512,13 +521,55 @@ void refresh(int value)
 
 
 	glutPostRedisplay();
-	glutTimerFunc(1000 / 60, refresh, 0);
+	glutTimerFunc(1000 / 100, refresh, 0);
 }
 
 // ------------------------------------------------------------
 //
 // Reshape Callback Function
 //
+
+void updateStencil(int w, int h) {
+	// set the viewport to be the entire window
+	glViewport(0, 0, w, h);
+
+	/* create a diamond shaped stencil area */
+	loadIdentity(PROJECTION);
+	if (w <= h)
+		ortho(-2.0, 2.0, (GLfloat)h / (GLfloat)w,
+			(GLfloat)h / (GLfloat)w, -10, 10);
+	else
+		ortho(-2.0 * (GLfloat)w / (GLfloat)h,
+			2.0 * (GLfloat)w / (GLfloat)h, -2.0, 2.0, -10, 10);
+
+	// load identity matrices for Model-View
+	loadIdentity(VIEW);
+	loadIdentity(MODEL);
+
+	glUseProgram(shader.getProgramIndex());
+
+	//não vai ser preciso enviar o material pois o cubo não é desenhado
+	translate(MODEL, 0.0f, 0.0f, w / 2);
+	scale(MODEL, 0.25f, 1.0f, 0.25f);
+
+	// send matrices to OGL
+	computeDerivedMatrix(PROJ_VIEW_MODEL);
+	//glUniformMatrix4fv(vm_uniformId, 1, GL_FALSE, mCompMatrix[VIEW_MODEL]);
+	glUniformMatrix4fv(pvm_uniformId, 1, GL_FALSE, mCompMatrix[PROJ_VIEW_MODEL]);
+	computeNormalMatrix3x3();
+	glUniformMatrix3fv(normal_uniformId, 1, GL_FALSE, mNormal3x3);
+
+	glClear(GL_STENCIL_BUFFER_BIT);
+
+	glStencilFunc(GL_NEVER, 0x1, 0x1);
+	glStencilOp(GL_REPLACE, GL_KEEP, GL_KEEP);
+
+
+	glBindVertexArray(myMeshes[19].vao);
+	glDrawElements(myMeshes[19].type, myMeshes[19].numIndexes, GL_UNSIGNED_INT, 0);
+	glBindVertexArray(0);
+
+}
 
 void changeSize(int w, int h) {
 
@@ -528,6 +579,14 @@ void changeSize(int w, int h) {
 		h = 1;
 	// set the viewport to be the entire window
 	glViewport(0, 0, w, h);
+
+	rearviewWidth = w / 4;
+	rearviewHeight = h / 4;
+	rearviewX = w / 4;
+	rearviewY = h * 3 / 4;
+
+	updateStencil(w, h);
+
 	// set the projection matrix
 	ratio = (1.0f * w) / h;
 	loadIdentity(PROJECTION);
@@ -622,38 +681,279 @@ void renderHUD() {
 	glDisable(GL_BLEND);
 }
 
+void renderMainScene() {
+	GLint loc;
+
+	int buoy = 0; // Start with first object
+
+	glActiveTexture(GL_TEXTURE0);
+	glBindTexture(GL_TEXTURE_2D, TextureArray[0]);
+
+	glActiveTexture(GL_TEXTURE1);
+	glBindTexture(GL_TEXTURE_2D, TextureArray[1]);
+
+	//Indicar aos tres samplers do GLSL quais os Texture Units a serem usados
+	glUniform1i(tex_loc, 0);
+
+	glUniform1i(tex_loc1, 1);
+
+	for (int i = 0; i < 19; i++) {
+		// send the material
+		loc = glGetUniformLocation(shader.getProgramIndex(), "mat.ambient");
+		glUniform4fv(loc, 1, myMeshes[i].mat.ambient);
+		loc = glGetUniformLocation(shader.getProgramIndex(), "mat.diffuse");
+		glUniform4fv(loc, 1, myMeshes[i].mat.diffuse);
+		loc = glGetUniformLocation(shader.getProgramIndex(), "mat.specular");
+		glUniform4fv(loc, 1, myMeshes[i].mat.specular);
+		loc = glGetUniformLocation(shader.getProgramIndex(), "mat.shininess");
+		glUniform1f(loc, myMeshes[i].mat.shininess);
+		pushMatrix(MODEL);
+
+		//if (i == 0) translate(MODEL, 0.0f, -0.01f, 0.0f);
+
+		if (i == 1) translate(MODEL, -10.0f, 0.01f, 0.0f); //island
+
+		// fix house base offset
+		if (i == 2) translate(MODEL, -12.5f, 0.5f, -0.5f);
+
+		if (i == 3) { //house roof
+			translate(MODEL, -12.5f, 1.0f, -0.5f);
+			rotate(MODEL, 45, 0, 1, 0);
+		}
+
+		if (i == 4) translate(MODEL, -7.0f, 0.3f, 0.5f);
+
+		if (i == 5 || i == 6) translate(MODEL, -9.0f, 0.25f, 2.0f); // tree
+
+		if (i == 7) { // boat base
+			translate(MODEL, boat.position[0], 0.1, boat.position[2]);
+			rotate(MODEL, boat.angle, 0, 1, 0);
+			scale(MODEL, 0.4f, 0.2f, 0.7f);
+		}
+		if (i == 8) { // boat front
+			translate(MODEL, boat.position[0], 0.1, boat.position[2]);
+			rotate(MODEL, boat.angle, 0, 1, 0);
+			translate(MODEL, 0.0f, 0.0f, 0.35f);
+			rotate(MODEL, 90, 1, 0, 0);
+			scale(MODEL, 1, 1, 0.5);
+			rotate(MODEL, 45, 0, 1, 0);
+		}
+		if (i == 10) { // left row handle
+			translate(MODEL, boat.position[0], 0.15f, boat.position[2]);
+			rotate(MODEL, boat.angle, 0, 1, 0);
+			if (boat.left_paddle_working && boat.paddle_direction == 1)
+				rotate(MODEL, boat.paddle_angle, 1, 0, 0);
+			else if (boat.left_paddle_working && boat.paddle_direction == 0)
+				rotate(MODEL, -boat.paddle_angle, 1, 0, 0);
+			translate(MODEL, -0.3f, 0.0f, 0.0f);
+			rotate(MODEL, -45, 0, 0, 1);
+		}
+		if (i == 9) { // right row handle
+			translate(MODEL, boat.position[0], 0.15f, boat.position[2]);
+			rotate(MODEL, boat.angle, 0, 1, 0);
+			if (boat.right_paddle_working && boat.paddle_direction == 1)
+				rotate(MODEL, boat.paddle_angle, 1, 0, 0);
+			else if (boat.right_paddle_working && boat.paddle_direction == 0)
+				rotate(MODEL, -boat.paddle_angle, 1, 0, 0);
+			translate(MODEL, 0.3f, 0.0f, 0.0f);
+			rotate(MODEL, 45, 0, 0, 1);
+		}
+		if (i == 11) { //left row paddle
+			translate(MODEL, boat.position[0], 0.0f, boat.position[2]);
+			rotate(MODEL, boat.angle, 0, 1, 0);
+			translate(MODEL, 0.0f, 0.15f, 0.0f);
+			if (boat.left_paddle_working && boat.paddle_direction == 1)
+				rotate(MODEL, boat.paddle_angle, 1, 0, 0);
+			else if (boat.left_paddle_working && boat.paddle_direction == 0)
+				rotate(MODEL, -boat.paddle_angle, 1, 0, 0);
+			rotate(MODEL, 180, 1, 0, 0);
+			translate(MODEL, -0.4f, 0.15f, 0.0f);
+			rotate(MODEL, 45, 0, 0, 1);
+			scale(MODEL, 0.1f, 0.15f, 0.05f);
+		}
+		if (i == 12) { //right3 row paddle
+			translate(MODEL, boat.position[0], 0.0f, boat.position[2]);
+			rotate(MODEL, boat.angle, 0, 1, 0);
+			translate(MODEL, 0.0f, 0.15f, 0.0f);
+			if (boat.right_paddle_working && boat.paddle_direction == 1)
+				rotate(MODEL, boat.paddle_angle, 1, 0, 0);
+			else if (boat.right_paddle_working && boat.paddle_direction == 0)
+				rotate(MODEL, -boat.paddle_angle, 1, 0, 0);
+			rotate(MODEL, 180, 1, 0, 0);
+			translate(MODEL, 0.4f, 0.15f, 0.0f);
+			rotate(MODEL, -45, 0, 0, 1);
+			scale(MODEL, 0.1f, 0.15f, 0.05f);
+		}
+		if (i > 12) {
+			translate(MODEL, buoy_positions[buoy][0], 0.0f, buoy_positions[buoy][1]);
+			buoy++;
+		}
+
+
+
+		// send matrices to OGL
+		computeDerivedMatrix(PROJ_VIEW_MODEL);
+		glUniformMatrix4fv(vm_uniformId, 1, GL_FALSE, mCompMatrix[VIEW_MODEL]);
+		glUniformMatrix4fv(pvm_uniformId, 1, GL_FALSE, mCompMatrix[PROJ_VIEW_MODEL]);
+		computeNormalMatrix3x3();
+		glUniformMatrix3fv(normal_uniformId, 1, GL_FALSE, mNormal3x3);
+
+		// Render mesh
+		glBindVertexArray(myMeshes[i].vao);
+		if (i == 0) {
+			glUniform1i(texMode_uniformId, 1);
+		}
+		else glUniform1i(texMode_uniformId, 0);
+
+		glDrawElements(myMeshes[i].type, myMeshes[i].numIndexes, GL_UNSIGNED_INT, 0);
+		glBindVertexArray(0);
+
+
+		popMatrix(MODEL);
+
+	}
+	renderFish();
+}
+
+void drawStencilQuad() {
+	// Draw a simple quad where the rear-view camera will appear
+	glBegin(GL_QUADS);
+	glVertex2f(-0.9f, -0.9f);
+	glVertex2f(-0.5f, -0.9f);
+	glVertex2f(-0.5f, -0.5f);
+	glVertex2f(-0.9f, -0.5f);
+	glEnd();
+}
 
 
 void renderScene(void) {
-
 	GLint loc;
-
 	FrameCount++;
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-	// load identity matrices
+
+	int windowWidth = glutGet(GLUT_WINDOW_WIDTH);
+	int windowHeight = glutGet(GLUT_WINDOW_HEIGHT);
+
+	// Rear-view camera rendering when active == 2
+	if (active == 2) {
+		// Enable stencil test
+		glEnable(GL_STENCIL_TEST);
+		glClear(GL_STENCIL_BUFFER_BIT);
+
+		// Rear-view camera rendering only within the quad
+		glStencilFunc(GL_ALWAYS, 1, 0xFF);
+		glStencilMask(0xFF);
+		glStencilOp(GL_KEEP, GL_KEEP, GL_KEEP);
+
+
+		// Set up rear-view camera (cams[3] view)
+		glViewport(windowWidth/ 4, 0, windowWidth / 2, windowHeight / 2); // Adjust size/position for the rear-view
+		loadIdentity(VIEW);
+		loadIdentity(MODEL);
+
+		lookAt(cams[3].camPos[0], cams[3].camPos[1], cams[3].camPos[2],
+			cams[3].camTarget[0], cams[3].camTarget[1], cams[3].camTarget[2],
+			0.0f, 1.0f, 0.0f);
+
+		GLint m_view[4];
+		glGetIntegerv(GL_VIEWPORT, m_view);
+		float ratio = (float)(m_view[2] - m_view[0]) / (float)(m_view[3] - m_view[1]);
+
+		loadIdentity(PROJECTION);
+		if (cams[3].type == PERSPECTIVE) {
+			perspective(53.13f, ratio, 0.1f, 1000.0f);
+		}
+		else if (cams[3].type == ORTHOGONAL) {
+			ortho(ratio * (-25), ratio * 25, -25, 25, 0.1f, 1000.0f);
+		}
+
+		// Use your shader and send uniforms
+		glUseProgram(shader.getProgramIndex());
+
+		//send the light position in eye coordinates
+		//glUniform4fv(lPos_uniformId, 1, lightPos); //efeito capacete do mineiro, ou seja lighPos foi definido em eye coord 
+
+		float res[4];
+		//multMatrixPoint(VIEW, lightPos,res);   //lightPos definido em World Coord so is converted to eye space
+		//glUniform4fv(lPos_uniformId, 1, res);
+		loc = glGetUniformLocation(shader.getProgramIndex(), "isDay");
+		if (isDay == true)
+			glUniform1i(loc, 1);
+		else
+			glUniform1i(loc, 0);
+
+		loc = glGetUniformLocation(shader.getProgramIndex(), "pointLightsOn");
+		if (pointLightsOn == true)
+			glUniform1i(loc, 1);
+		else
+			glUniform1i(loc, 0);
+
+		loc = glGetUniformLocation(shader.getProgramIndex(), "spotLightsOn");
+		if (spotLightsOn == true)
+			glUniform1i(loc, 1);
+		else
+			glUniform1i(loc, 0);
+
+
+		loc = glGetUniformLocation(shader.getProgramIndex(), "fogEffectOn");
+		if (fogEffectOn == true)
+			glUniform1i(loc, 1);
+		else
+			glUniform1i(loc, 0);
+
+		loc = glGetUniformLocation(shader.getProgramIndex(), "spotCosCutOff");
+		glUniform1f(loc, 0.93f);
+
+		//Send the directional light position
+		GLint ldirpos = glGetUniformLocation(shader.getProgramIndex(), "dir_pos");
+		multMatrixPoint(VIEW, directionalLightDir, res);
+		glUniform4fv(ldirpos, 1, res);
+
+		//send the point light positions
+		for (int i = 0; i < 6; i++) {
+			multMatrixPoint(VIEW, pointLightPos[i], res);
+			glUniform4fv(lPos_uniformId[i], 1, res);
+		}
+
+		for (int i = 0; i < 2; i++) {
+			multMatrixPoint(VIEW, spotLightPos[i], res);
+			glUniform4fv(lPos_uniformId[6 + i], 1, res);
+		}
+
+		loc = glGetUniformLocation(shader.getProgramIndex(), "coneDir");
+		multMatrixPoint(VIEW, coneDir, res);
+		glUniform4fv(loc, 1, res);
+
+		// Render the scene in the rear-view area
+		renderMainScene();  // Use this function to render the scene
+
+		// Reset the stencil mask for the main view rendering
+		glStencilMask(0x00);
+		glStencilFunc(GL_NOTEQUAL, 0x1, 0xFF);
+	}
+
+	// Main camera rendering
+	glViewport(0, 0, windowWidth, windowHeight);  // Reset to full window viewport
 	loadIdentity(VIEW);
 	loadIdentity(MODEL);
-
-	// set the cameras
-	GLint m_view[4];
 
 	lookAt(cams[active].camPos[0], cams[active].camPos[1], cams[active].camPos[2],
 		cams[active].camTarget[0], cams[active].camTarget[1], cams[active].camTarget[2],
 		0.0f, 1.0f, 0.0f);
+
+	GLint m_view[4];
 	glGetIntegerv(GL_VIEWPORT, m_view);
 	float ratio = (float)(m_view[2] - m_view[0]) / (float)(m_view[3] - m_view[1]);
 
 	loadIdentity(PROJECTION);
-
 	if (cams[active].type == PERSPECTIVE) {
 		perspective(53.13f, ratio, 0.1f, 1000.0f);
 	}
 	else if (cams[active].type == ORTHOGONAL) {
-		ortho(ratio*(-25), ratio*25, -25, 25, 0.1f, 1000.0f);
+		ortho(ratio * (-25), ratio * 25, -25, 25, 0.1f, 1000.0f);
 	}
 
-	// use our shader
-	
+	// Use your shader and send uniforms
 	glUseProgram(shader.getProgramIndex());
 
 	//send the light position in eye coordinates
@@ -710,144 +1010,11 @@ void renderScene(void) {
 	multMatrixPoint(VIEW, coneDir, res);
 	glUniform4fv(loc, 1, res);
 
-	int objId=0; //id of the object mesh - to be used as index of mesh: Mymeshes[objID] means the current mesh
+	// Render main scene
+	renderMainScene();  // Renders all objects, boat, fish, HUD, etc.
 
-	int buoy = 0;
-
-	// Associar os Texture Units aos Objects Texture
-
-	glActiveTexture(GL_TEXTURE0);
-	glBindTexture(GL_TEXTURE_2D, TextureArray[0]);
-
-	glActiveTexture(GL_TEXTURE1);
-	glBindTexture(GL_TEXTURE_2D, TextureArray[1]);
-
-
-	//Indicar aos tres samplers do GLSL quais os Texture Units a serem usados
-	glUniform1i(tex_loc, 0);
-	
-	glUniform1i(tex_loc1, 1);
-
-	for (int i = 0 ; i < 19; i++) {
-
-		// send the material
-		loc = glGetUniformLocation(shader.getProgramIndex(), "mat.ambient");
-		glUniform4fv(loc, 1, myMeshes[objId].mat.ambient);
-		loc = glGetUniformLocation(shader.getProgramIndex(), "mat.diffuse");
-		glUniform4fv(loc, 1, myMeshes[objId].mat.diffuse);
-		loc = glGetUniformLocation(shader.getProgramIndex(), "mat.specular");
-		glUniform4fv(loc, 1, myMeshes[objId].mat.specular);
-		loc = glGetUniformLocation(shader.getProgramIndex(), "mat.shininess");
-		glUniform1f(loc, myMeshes[objId].mat.shininess);
-		pushMatrix(MODEL);
-
-		//if (i == 0) translate(MODEL, 0.0f, -0.01f, 0.0f);
-
-		if (i == 1) translate(MODEL, -10.0f, 0.01f, 0.0f); //island
-
-		// fix house base offset
-		if (i == 2) translate(MODEL, -12.5f, 0.5f, -0.5f);
-
-		if (i == 3) { //house roof
-			translate(MODEL, -12.5f, 1.0f, -0.5f);
-			rotate(MODEL, 45, 0, 1, 0);
-		}
-
-		if (i == 4) translate(MODEL, -7.0f, 0.3f, 0.5f);
-
-		if (i == 5 || i == 6) translate(MODEL, -9.0f, 0.25f, 2.0f); // tree
-
-		if (i == 7) { // boat base
-			translate(MODEL, boat.position[0], 0.1, boat.position[2]);
-			rotate(MODEL, boat.angle, 0, 1, 0);
-			scale(MODEL, 0.4f, 0.2f, 0.7f);
-		}
-		if (i == 8) { // boat front
-			translate(MODEL, boat.position[0], 0.1, boat.position[2]);
-			rotate(MODEL, boat.angle, 0, 1, 0);
-			translate(MODEL, 0.0f, 0.0f, 0.35f);
-			rotate(MODEL, 90, 1, 0, 0);
-			scale(MODEL, 1, 1, 0.5);
-			rotate(MODEL, 45, 0, 1, 0);
-		}
-		if (i == 10) { // left row handle
-			translate(MODEL, boat.position[0], 0.15f, boat.position[2]);
-			rotate(MODEL, boat.angle, 0, 1, 0);
-			if (boat.left_paddle_working && boat.paddle_direction == 1)	
-				rotate(MODEL, boat.paddle_angle, 1, 0, 0);
-			else if (boat.left_paddle_working && boat.paddle_direction == 0)
-				rotate(MODEL, -boat.paddle_angle, 1, 0, 0);
-			translate(MODEL, -0.3f, 0.0f, 0.0f);
-			rotate(MODEL, -45, 0, 0, 1);
-		}
-		if (i == 9 ) { // right row handle
-			translate(MODEL, boat.position[0], 0.15f, boat.position[2]);
-			rotate(MODEL, boat.angle, 0, 1, 0);
-			if (boat.right_paddle_working && boat.paddle_direction == 1)
-				rotate(MODEL, boat.paddle_angle, 1, 0, 0);
-			else if (boat.right_paddle_working && boat.paddle_direction == 0)
-				rotate(MODEL, -boat.paddle_angle, 1, 0, 0);
-			translate(MODEL, 0.3f, 0.0f, 0.0f);
-			rotate(MODEL, 45, 0, 0, 1);
-		}
-		if (i == 11) { //left row paddle
-			translate(MODEL, boat.position[0], 0.0f, boat.position[2]);
-			rotate(MODEL, boat.angle, 0, 1, 0);
-			translate(MODEL, 0.0f, 0.15f, 0.0f);
-			if (boat.left_paddle_working && boat.paddle_direction == 1)
-				rotate(MODEL,boat.paddle_angle, 1, 0, 0);
-			else if (boat.left_paddle_working && boat.paddle_direction == 0)
-				rotate(MODEL, -boat.paddle_angle, 1, 0, 0);
-			rotate(MODEL, 180, 1, 0, 0);
-			translate(MODEL, -0.4f, 0.15f, 0.0f);
-			rotate(MODEL, 45, 0, 0, 1);
-			scale(MODEL, 0.1f, 0.15f, 0.05f);
-		}
-		if (i == 12) { //right3 row paddle
-			translate(MODEL, boat.position[0], 0.0f, boat.position[2]);
-			rotate(MODEL, boat.angle, 0, 1, 0);
-			translate(MODEL, 0.0f, 0.15f, 0.0f);
-			if (boat.right_paddle_working && boat.paddle_direction == 1)
-				rotate(MODEL, boat.paddle_angle, 1, 0, 0);
-			else if (boat.right_paddle_working && boat.paddle_direction == 0)
-				rotate(MODEL, -boat.paddle_angle, 1, 0, 0);
-			rotate(MODEL, 180, 1, 0, 0);
-			translate(MODEL, 0.4f, 0.15f, 0.0f);
-			rotate(MODEL, -45, 0, 0, 1);
-			scale(MODEL, 0.1f, 0.15f, 0.05f);
-		}
-		
-		if (i > 12) {
-			translate(MODEL, buoy_positions[buoy][0], 0.0f, buoy_positions[buoy][1]);
-			buoy++;
-		}
-
-
-		// send matrices to OGL
-		computeDerivedMatrix(PROJ_VIEW_MODEL);
-		glUniformMatrix4fv(vm_uniformId, 1, GL_FALSE, mCompMatrix[VIEW_MODEL]);
-		glUniformMatrix4fv(pvm_uniformId, 1, GL_FALSE, mCompMatrix[PROJ_VIEW_MODEL]);
-		computeNormalMatrix3x3();
-		glUniformMatrix3fv(normal_uniformId, 1, GL_FALSE, mNormal3x3);
-
-		// Render mesh
-		glBindVertexArray(myMeshes[i].vao);
-		if (i == 0) {
-			glUniform1i(texMode_uniformId, 1);
-		}
-		else glUniform1i(texMode_uniformId, 0);
-			
-		glDrawElements(myMeshes[i].type, myMeshes[i].numIndexes, GL_UNSIGNED_INT, 0);
-		glBindVertexArray(0);
-	
-
-		popMatrix(MODEL);
-		objId++;
-		
-	}
-	renderFish();
+	// Finalize and swap buffers
 	renderHUD();
-
 	glutSwapBuffers();
 }
 
@@ -1023,9 +1190,11 @@ void processMouseMotion(int xx, int yy)
 
 	}
 
-	cams[2].camPos[0] = boat.position[0] + rAux * sin(alphaAux * 3.14f / 180.0f) * cos(betaAux * 3.14f / 180.0f);
-	cams[2].camPos[2] = boat.position[2] + rAux * cos(alphaAux * 3.14f / 180.0f) * cos(betaAux * 3.14f / 180.0f);
-	cams[2].camPos[1] = rAux * sin(betaAux * 3.14f / 180.0f);
+	if (active == 2) {
+		cams[2].camPos[0] = boat.position[0] + rAux * sin(alphaAux * 3.14f / 180.0f) * cos(betaAux * 3.14f / 180.0f);
+		cams[2].camPos[2] = boat.position[2] + rAux * cos(alphaAux * 3.14f / 180.0f) * cos(betaAux * 3.14f / 180.0f);
+		cams[2].camPos[1] = rAux * sin(betaAux * 3.14f / 180.0f);
+	}
 
 //  uncomment this if not using an idle or refresh func
 //	glutPostRedisplay();
@@ -1126,6 +1295,29 @@ void initCams() {
 	cams[0].type = ORTHOGONAL;
 	cams[1].type = PERSPECTIVE;
 	cams[2].type = PERSPECTIVE;
+	cams[3].type = PERSPECTIVE;
+	cams[3].camPos[0] = boat.position[0];
+	cams[3].camPos[1] = 1.0f;
+	cams[3].camPos[2] = boat.position[2] - 1.0f;
+
+	cams[3].camTarget[0] = boat.position[0] - 10;
+	cams[3].camTarget[1] = 0.0f;
+	cams[3].camTarget[2] = boat.position[2] - 10;
+
+	int windowWidth = glutGet(GLUT_WINDOW_WIDTH);
+	int windowHeight = glutGet(GLUT_WINDOW_HEIGHT);
+
+	rearviewWidth = windowWidth / 4;
+	rearviewHeight = windowHeight / 4;
+	rearviewX = windowWidth / 4;
+	rearviewY = rearviewHeight * 3;
+
+	printf("Window Width: %d\n", windowWidth);
+	printf("Window Height: %d\n", windowHeight);
+	printf("Rearview X: %d\n", rearviewX);
+	printf("Rearview Y: %d\n", rearviewY);
+
+
 	return;
 }
 
@@ -1369,6 +1561,16 @@ void init()
 	// for 6 buoys
 	for (int i = 0; i < 6; i++) myMeshes.push_back(amesh);
 
+	// create geometry and VAO of the cube
+	amesh = createQuad(1.0f, 1.0f); // id 19
+	memcpy(amesh.mat.ambient, amb5, 4 * sizeof(float));
+	memcpy(amesh.mat.diffuse, diff5, 4 * sizeof(float));
+	memcpy(amesh.mat.specular, spec5, 4 * sizeof(float));
+	memcpy(amesh.mat.emissive, emissive, 4 * sizeof(float));
+	amesh.mat.shininess = shininess;
+	amesh.mat.texCount = texcount;
+	myMeshes.push_back(amesh);
+
 
 	//// some GL settings
 	glEnable(GL_DEPTH_TEST);
@@ -1391,7 +1593,7 @@ int main(int argc, char **argv) {
 
 //  GLUT initialization
 	glutInit(&argc, argv);
-	glutInitDisplayMode(GLUT_DEPTH|GLUT_DOUBLE|GLUT_RGBA|GLUT_MULTISAMPLE);
+	glutInitDisplayMode(GLUT_DEPTH | GLUT_DOUBLE | GLUT_RGBA | GLUT_STENCIL | GLUT_MULTISAMPLE);
 
 	glutInitContextVersion (4, 3);
 	glutInitContextProfile (GLUT_CORE_PROFILE );
@@ -1403,7 +1605,6 @@ int main(int argc, char **argv) {
 
 	//glEnable(GL_BLEND); //TRANS
 	//glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);  //TRANS
-
 
 
 //  Callback Registration

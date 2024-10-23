@@ -75,7 +75,13 @@ void main() {
 			texel1 = texture(texmap1, DataIn.tex_coord);
 			colorAux += max(intensity*texel*texel1 + spec, 0.07*texel*texel1);
 		}
-
+	}
+	else {
+		if (texMode == 1) {
+			texel = texture(texmap, DataIn.tex_coord); 
+			texel1 = texture(texmap1, DataIn.tex_coord);
+			colorAux += 0.07*texel*texel1;
+		}
 	}
 
 	if (pointLightsOn == true) { // pointlights are on
