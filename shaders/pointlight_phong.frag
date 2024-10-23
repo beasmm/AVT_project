@@ -144,9 +144,9 @@ void main() {
 	}
 	if (texMode == 2) {
 		texel = texture(texmap, DataIn.tex_coord);  //texel from element flare texture
-		if((texel.a == 0.0)) discard;
+		if(texel.a == 0.0) discard;
 		else
-			colorOut = mat.diffuse * texel * 0.5g;
+			colorOut = mat.diffuse * texel * 0.5f;
 	}
 		
 
