@@ -210,7 +210,7 @@ float r = 20.0f;
 // Frame counting and FPS computation
 long myTime, timebase = 0, frame = 0;
 char s[32];
-float lightPos[4] = { 4.0f, 6.0f, 2.0f, 1.0f };
+float lightPos[4] = { -10.0f, -10.0f, -10.0f, 1.0f };
 	
 //////////////////////////////////////////////////////////////////////////
 //collision variables, matrix calcs, OBB into AABB and collision detection.
@@ -1527,7 +1527,7 @@ void init()
 		myMeshes.push_back(amesh);
 
 	// create geometry and VAO of the quad for flare elements
-	amesh = createQuad(1, 1);
+	amesh = createCube(); // created a cube because quad was not rendering a flare
 	myMeshes.push_back(amesh);
 
 	//Load flare from file

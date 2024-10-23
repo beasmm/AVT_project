@@ -76,23 +76,11 @@ void main() {
 			texel1 = texture(texmap1, DataIn.tex_coord);
 			colorAux += max(intensity*texel*texel1 + spec, 0.07*texel*texel1);
 		}
-		else if (texMode == 2) {
-			texel = texture(texmap, DataIn.tex_coord);  //texel from element flare texture
-			if((texel.a == 0.0)  || (mat.diffuse.a == 0.0) ) discard;
-			else
-				colorAux += mat.diffuse * texel;
-		}
 	} else {
 		if (texMode == 1) {
 			texel = texture(texmap, DataIn.tex_coord); 
 			texel1 = texture(texmap1, DataIn.tex_coord);
 			colorAux += 0.07*texel*texel1;
-		}
-		else if (texMode == 2) {
-			texel = texture(texmap, DataIn.tex_coord);  //texel from element flare texture
-			if((texel.a == 0.0)  || (mat.diffuse.a == 0.0) ) discard;
-			else
-				colorAux += mat.diffuse * texel;
 		}
 
 	}
@@ -114,12 +102,6 @@ void main() {
 				texel = texture(texmap, DataIn.tex_coord);
 				texel1 = texture(texmap1, DataIn.tex_coord);
 				colorPoint += max(intensity*texel*texel1 + spec, 0.07*texel*texel1);
-			}
-			else if (texMode == 2) {
-				texel = texture(texmap, DataIn.tex_coord);  //texel from element flare texture
-				if((texel.a == 0.0)  || (mat.diffuse.a == 0.0) ) discard;
-				else
-					colorPoint += mat.diffuse * texel;
 			}
 		}
 	}
@@ -148,18 +130,10 @@ void main() {
 					texel1 = texture(texmap1, DataIn.tex_coord); 
 					colorSpot += max(intensity*texel*texel1 + spec, 0.07*texel*texel1);
 				}
-				else if (texMode == 2) {
-					texel = texture(texmap, DataIn.tex_coord);  //texel from element flare texture
-					if((texel.a == 0.0)  || (mat.diffuse.a == 0.0) ) discard;
-					else
-						colorSpot += mat.diffuse * texel;
-				}
 			}
 		}
 	}
 	colorOut = clamp(colorAux + colorPoint + colorSpot, 0.0f, 1.0f);
-
-
 	if (fogEffectOn == true) {
 		float dist = length(DataIn.eye);
 
@@ -168,4 +142,12 @@ void main() {
 		vec3 finalColor = mix(colorOut.rgb, fogColor, fogAmount);
 		colorOut = vec4(finalColor, 1.0);
 	}
+	if (texMode == 2) {
+		texel = texture(texmap, DataIn.tex_coord);  //texel from element flare texture
+		if(texel.a == 0.0) discard;
+		else
+			colorOut = mat.diffuse * texel * 0.5f;
+	}
+		
+
 }
