@@ -16,7 +16,6 @@ uniform bool spotLightsOn;
 uniform vec4 coneDir;
 uniform float spotCosCutOff;
 uniform bool fogEffectOn;
-uniform bool flareEffectOn;
 
 uniform vec4 dir_pos;
 
@@ -42,7 +41,7 @@ in Data {
 
 void main() {
 	
-	vec4 texel, texel1; 
+	vec4 texel, texel1, texel2; 
 
 	vec4 spec = vec4(0.0);
 	vec4 colorAux = mat.ambient;
@@ -76,11 +75,23 @@ void main() {
 			texel1 = texture(texmap1, DataIn.tex_coord);
 			colorAux += max(intensity*texel*texel1 + spec, 0.07*texel*texel1);
 		}
+		else if (texMode == 3) {
+			texel2 = texture(texmap2, DataIn.tex_coord); 
+			if(texel2.a == 0.0) discard;
+			else
+				colorAux = vec4(max((intensity*texel2 + spec).rgb, 0.1*texel2.rgb), texel2.a);
+		}
 	} else {
 		if (texMode == 1) {
 			texel = texture(texmap, DataIn.tex_coord); 
 			texel1 = texture(texmap1, DataIn.tex_coord);
 			colorAux += 0.07*texel*texel1;
+		}
+		else if (texMode == 3) {
+			texel2 = texture(texmap2, DataIn.tex_coord); 
+			if(texel2.a == 0.0) discard;
+			else
+				colorAux += 0.1*texel2;
 		}
 
 	}
@@ -102,6 +113,12 @@ void main() {
 				texel = texture(texmap, DataIn.tex_coord);
 				texel1 = texture(texmap1, DataIn.tex_coord);
 				colorPoint += max(intensity*texel*texel1 + spec, 0.07*texel*texel1);
+			}
+			else if (texMode == 3) {
+				texel2 = texture(texmap2, DataIn.tex_coord); 
+				if(texel2.a == 0.0) discard;
+				else
+					colorPoint = vec4(max((intensity*texel2 + spec).rgb, 0.1*texel2.rgb), texel2.a);
 			}
 		}
 	}
@@ -130,6 +147,12 @@ void main() {
 					texel1 = texture(texmap1, DataIn.tex_coord); 
 					colorSpot += max(intensity*texel*texel1 + spec, 0.07*texel*texel1);
 				}
+				else if (texMode == 3) {
+					texel2 = texture(texmap2, DataIn.tex_coord); 
+					if(texel2.a == 0.0) discard;
+					else
+						colorSpot = vec4(max((intensity*texel2 + spec).rgb, 0.1*texel2.rgb), texel2.a);
+				}
 			}
 		}
 	}
@@ -140,8 +163,9 @@ void main() {
 		float fogAmount = exp(-dist*0.05);
 		vec3 fogColor = vec3( 0.5, 0.6, 0.7);
 		vec3 finalColor = mix(colorOut.rgb, fogColor, fogAmount);
-		colorOut = vec4(finalColor, 1.0);
+		colorOut = vec4(finalColor, 1);
 	}
+	
 	if (texMode == 2) {
 		texel = texture(texmap, DataIn.tex_coord);  //texel from element flare texture
 		if(texel.a == 0.0) discard;
@@ -149,5 +173,4 @@ void main() {
 			colorOut = mat.diffuse * texel * 0.5f;
 	}
 		
-
 }

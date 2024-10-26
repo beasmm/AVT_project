@@ -19,7 +19,7 @@
 #include <vector>
 #include <cstdlib>  // for random numbers
 
-// include GLEW to access OpenGL 3.3 functions
+// include GLEW to access OpenGL 3.3 
 #include <GL/glew.h>
 
 
@@ -37,12 +37,17 @@
 #include "Texture_Loader.h"
 #include "flare.h"
 #include "avtFreeType.h"
+#include "l3dBillboard.h"
 
 #define ORTHOGONAL 0
 #define PERSPECTIVE 1
 #define MOVING 2
 
 #define BOAT 7
+
+#define frand()			((float)rand()/RAND_MAX)
+#define M_PI			3.14159265
+#define MAX_PARTICULAS  1500
 
 using namespace std;
 
@@ -81,24 +86,11 @@ GLint vm_uniformId;
 GLint normal_uniformId;
 GLint lPos_uniformId[8];
 GLint lightEnabledId;
-GLuint TextureArray[2];
+GLuint TextureArray[4];
 GLint texMode_uniformId;
 GLint flareEffectOnId;
 
 GLint tex_loc, tex_loc1, tex_loc2, tex_flare;
-
-
-// CALCULATIONS 
-
-inline double clamp(const double x, const double min, const double max) {
-	return (x < min ? min : (x > max ? max : x));
-}
-
-inline int clampi(const int x, const int min, const int max) {
-	return (x < min ? min : (x > max ? max : x));
-}
-// ------------------------------------------------------------
-
 
 class AABB {
 public:
@@ -142,11 +134,30 @@ public:
 Boat boat;
 int play_time = 0;
 
+typedef struct {
+	float	life;		// vida
+	float	fade;		// fade
+	float	r, g, b;    // color
+	GLfloat x, y, z;    // posi‹o
+	GLfloat vx, vy, vz; // velocidade 
+	GLfloat ax, ay, az; // acelera‹o
+} Particle;
+
+Particle particula[MAX_PARTICULAS];
+int dead_num_particles = 0;
+
 const int maxFish = 10; //Numero Maximo de Peixes
 const float maxDistance = 20.0f; //Distancia a que podem tar do barco
 
 float deltaT = 0.05;
 float speed_decay = 0.01;
+
+float angle = 0.0, deltaAngle = 0.0, ratio;
+float x = 0.0f, y = 1.75f, z = 10.0f;
+float lx = 0.0f, ly = 0.0f, lz = -1.0f;
+
+int deltaMove = 0, deltaUp = 0, type = 0;
+int fireworks = 0;
 
 class Fish {
 public:
@@ -215,6 +226,16 @@ float lightPos[4] = { -10.0f, -10.0f, -10.0f, 1.0f };
 //////////////////////////////////////////////////////////////////////////
 //collision variables, matrix calcs, OBB into AABB and collision detection.
 //variables
+
+// CALCULATIONS 
+
+inline double clamp(const double x, const double min, const double max) {
+	return (x < min ? min : (x > max ? max : x));
+}
+
+inline int clampi(const int x, const int min, const int max) {
+	return (x < min ? min : (x > max ? max : x));
+}
 
 
 //matrix calcs
@@ -376,6 +397,61 @@ void updateFishSpeed(int value) {
 		fish.speed = fish.speed * 2;
 	}
 	glutTimerFunc(30000, updateFishSpeed, 0);
+}
+
+void updateParticles() {
+	int i;
+	float h;
+
+	/* Método de Euler de integração de eq. diferenciais ordinárias
+	h representa o step de tempo; dv/dt = a; dx/dt = v; e conhecem-se os valores iniciais de x e v */
+
+	//h = 0.125f;
+	h = 0.033;
+	if (fireworks) {
+
+		for (i = 0; i < MAX_PARTICULAS; i++)
+		{
+			particula[i].x += (h * particula[i].vx);
+			particula[i].y += (h * particula[i].vy);
+			particula[i].z += (h * particula[i].vz);
+			particula[i].vx += (h * particula[i].ax);
+			particula[i].vy += (h * particula[i].ay);
+			particula[i].vz += (h * particula[i].az);
+			particula[i].life -= particula[i].fade;
+		}
+	}
+}
+
+void iniParticles(void)
+{
+	GLfloat v, theta, phi;
+	int i;
+
+	for (i = 0; i < MAX_PARTICULAS; i++)
+	{
+		v = 0.8 * frand() + 0.2;
+		phi = frand() * M_PI;
+		theta = 2.0 * frand() * M_PI;
+
+		particula[i].x = 0.0f;
+		particula[i].y = 10.0f;
+		particula[i].z = 0.0f;
+		particula[i].vx = v * cos(theta) * sin(phi);
+		particula[i].vy = v * cos(phi);
+		particula[i].vz = v * sin(theta) * sin(phi);
+		particula[i].ax = 0.1f; /* simular um pouco de vento */
+		particula[i].ay = -0.15f; /* simular a aceleração da gravidade */
+		particula[i].az = 0.0f;
+
+		/* tom amarelado que vai ser multiplicado pela textura que varia entre branco e preto */
+		particula[i].r = 0.882f;
+		particula[i].g = 0.552f;
+		particula[i].b = 0.211f;
+
+		particula[i].life = 1.0f;		/* vida inicial */
+		particula[i].fade = 0.0025f;	    /* step de decréscimo da vida para cada iteração */
+	}
 }
 
 // ------------------------------------------------------------
@@ -609,7 +685,7 @@ void renderFish() {
 // Render stufff
 //
 
-void renderFlare(FLARE_DEF* flare, int lx, int ly, int* m_viewport) {  //lx, ly represent the projected position of light on viewport
+void renderFlare(FLARE_DEF* flare, int lX, int lY, int* m_viewport) {  //lX, lY represent the projected position of light on viewport
 
 	int     dx, dy;          // Screen coordinates of "destination"
 	int     px, py;          // Screen coordinates of flare element
@@ -635,14 +711,14 @@ void renderFlare(FLARE_DEF* flare, int lx, int ly, int* m_viewport) {  //lx, ly 
 
 	// Compute how far off-center the flare source is.
 	maxflaredist = sqrt(cx * cx + cy * cy);
-	flaredist = sqrt((lx - cx) * (lx - cx) + (ly - cy) * (ly - cy));
+	flaredist = sqrt((lX - cx) * (lX - cx) + (lY - cy) * (lY - cy));
 	scaleDistance = (maxflaredist - flaredist) / maxflaredist;
 	flaremaxsize = (int)(m_viewport[2] * flare->fMaxSize);
 	flarescale = (int)(m_viewport[2] * flare->fScale);
 
 	// Destination is opposite side of centre from source
-	dx = clampi(cx + (cx - lx), m_viewport[0], screenMaxCoordX);
-	dy = clampi(cy + (cy - ly), m_viewport[1], screenMaxCoordY);
+	dx = clampi(cx + (cx - lX), m_viewport[0], screenMaxCoordX);
+	dy = clampi(cy + (cy - lY), m_viewport[1], screenMaxCoordY);
 
 	// Render each element. To be used Texture Unit 0
 
@@ -652,8 +728,8 @@ void renderFlare(FLARE_DEF* flare, int lx, int ly, int* m_viewport) {  //lx, ly 
 	for (i = 0; i < flare->nPieces; ++i)
 	{
 		// Position is interpolated along line between start and destination.
-		px = (int)((1.0f - flare->element[i].fDistance) * lx + flare->element[i].fDistance * dx);
-		py = (int)((1.0f - flare->element[i].fDistance) * ly + flare->element[i].fDistance * dy);
+		px = (int)((1.0f - flare->element[i].fDistance) * lX + flare->element[i].fDistance * dx);
+		py = (int)((1.0f - flare->element[i].fDistance) * lY + flare->element[i].fDistance * dy);
 		px = clampi(px, m_viewport[0], screenMaxCoordX);
 		py = clampi(py, m_viewport[1], screenMaxCoordY);
 
@@ -685,8 +761,8 @@ void renderFlare(FLARE_DEF* flare, int lx, int ly, int* m_viewport) {  //lx, ly 
 			computeNormalMatrix3x3();
 			glUniformMatrix3fv(normal_uniformId, 1, GL_FALSE, mNormal3x3);
 
-			glBindVertexArray(myMeshes[19].vao);
-			glDrawElements(myMeshes[19].type, myMeshes[19].numIndexes, GL_UNSIGNED_INT, 0);
+			glBindVertexArray(myMeshes[13].vao);
+			glDrawElements(myMeshes[13].type, myMeshes[13].numIndexes, GL_UNSIGNED_INT, 0);
 			glBindVertexArray(0);
 			popMatrix(MODEL);
 		}
@@ -737,6 +813,19 @@ void renderHUD() {
 	glDisable(GL_BLEND);
 }
 
+void orientMe(float ang) {
+	lx = sin(ang);
+	lz = -cos(ang);
+}
+
+void moveMeFlat(int i) {
+	x = x + i * (lx) * 0.1;
+	z = z + i * (lz) * 0.1;
+}
+
+void Lookup(int i) {
+	ly += 0.01 * i;
+}
 
 void renderScene(void) {
 
@@ -834,25 +923,27 @@ void renderScene(void) {
 	glActiveTexture(GL_TEXTURE1);
 	glBindTexture(GL_TEXTURE_2D, TextureArray[1]);
 
+	glActiveTexture(GL_TEXTURE2);
+	glBindTexture(GL_TEXTURE_2D, TextureArray[2]);
 
 	//Indicar aos tres samplers do GLSL quais os Texture Units a serem usados
 	glUniform1i(tex_loc, 0);
 	glUniform1i(tex_loc1, 1);
+	glUniform1i(tex_loc2, 2);
 
-	for (int i = 0; i < 19; ++i) {
+	for (int i = 0; i < 18; ++i) {
 
 		// send the material
 		loc = glGetUniformLocation(shader.getProgramIndex(), "mat.ambient");
-		glUniform4fv(loc, 1, myMeshes[i].mat.ambient);
+		glUniform4fv(loc, 1, myMeshes[i-buoy].mat.ambient);
 		loc = glGetUniformLocation(shader.getProgramIndex(), "mat.diffuse");
-		glUniform4fv(loc, 1, myMeshes[i].mat.diffuse);
+		glUniform4fv(loc, 1, myMeshes[i-buoy].mat.diffuse);
 		loc = glGetUniformLocation(shader.getProgramIndex(), "mat.specular");
-		glUniform4fv(loc, 1, myMeshes[i].mat.specular);
+		glUniform4fv(loc, 1, myMeshes[i-buoy].mat.specular);
 		loc = glGetUniformLocation(shader.getProgramIndex(), "mat.shininess");
-		glUniform1f(loc, myMeshes[i].mat.shininess);
+		glUniform1f(loc, myMeshes[i-buoy].mat.shininess);
 		pushMatrix(MODEL);
 
-		//if (i == 0) translate(MODEL, 0.0f, -0.01f, 0.0f);
 
 		if (i == 1) translate(MODEL, -10.0f, 0.01f, 0.0f); //island
 
@@ -866,14 +957,35 @@ void renderScene(void) {
 
 		if (i == 4) translate(MODEL, -7.0f, 0.3f, 0.5f);
 
-		if (i == 5 || i == 6) translate(MODEL, -9.0f, 0.25f, 2.0f); // tree
+		if (i == 5) { // tree
+			glEnable(GL_BLEND);
+			glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-		if (i == 7) { // boat base
+			translate(MODEL, -9.0f, 0.25f, 2.0f);
+
+			float cam[3] = { cams[active].camPos[0], cams[active].camPos[1], cams[active].camPos[2] };
+			float pos[3] = { -9.0f, 0.25f, 2.0f };
+
+			l3dBillboardCylindricalBegin(cam, pos);
+
+			loc = glGetUniformLocation(shader.getProgramIndex(), "mat.specular");
+			glUniform4fv(loc, 1, myMeshes[i].mat.specular);
+			loc = glGetUniformLocation(shader.getProgramIndex(), "mat.shininess");
+			glUniform1f(loc, myMeshes[i].mat.shininess);
+
+			pushMatrix(MODEL);
+			translate(MODEL, 0.0, 3.0, 0.0f);
+			rotate(MODEL, 90, 1, 0, 0);
+
+			computeDerivedMatrix(PROJ_VIEW_MODEL);
+		}
+
+		if (i == 6) { // boat base
 			translate(MODEL, boat.position[0], 0.1, boat.position[2]);
 			rotate(MODEL, boat.angle, 0, 1, 0);
 			scale(MODEL, 0.4f, 0.2f, 0.7f);
 		}
-		if (i == 8) { // boat front
+		if (i == 7) { // boat front
 			translate(MODEL, boat.position[0], 0.1, boat.position[2]);
 			rotate(MODEL, boat.angle, 0, 1, 0);
 			translate(MODEL, 0.0f, 0.0f, 0.35f);
@@ -881,7 +993,7 @@ void renderScene(void) {
 			scale(MODEL, 1, 1, 0.5);
 			rotate(MODEL, 45, 0, 1, 0);
 		}
-		if (i == 10) { // left row handle
+		if (i == 9) { // left row handle
 			translate(MODEL, boat.position[0], 0.15f, boat.position[2]);
 			rotate(MODEL, boat.angle, 0, 1, 0);
 			if (boat.left_paddle_working && boat.paddle_direction == 1)
@@ -891,7 +1003,7 @@ void renderScene(void) {
 			translate(MODEL, -0.3f, 0.0f, 0.0f);
 			rotate(MODEL, -45, 0, 0, 1);
 		}
-		if (i == 9) { // right row handle
+		if (i == 8) { // right row handle
 			translate(MODEL, boat.position[0], 0.15f, boat.position[2]);
 			rotate(MODEL, boat.angle, 0, 1, 0);
 			if (boat.right_paddle_working && boat.paddle_direction == 1)
@@ -901,7 +1013,7 @@ void renderScene(void) {
 			translate(MODEL, 0.3f, 0.0f, 0.0f);
 			rotate(MODEL, 45, 0, 0, 1);
 		}
-		if (i == 11) { //left row paddle
+		if (i == 10) { //left row paddle
 			translate(MODEL, boat.position[0], 0.0f, boat.position[2]);
 			rotate(MODEL, boat.angle, 0, 1, 0);
 			translate(MODEL, 0.0f, 0.15f, 0.0f);
@@ -914,7 +1026,7 @@ void renderScene(void) {
 			rotate(MODEL, 45, 0, 0, 1);
 			scale(MODEL, 0.1f, 0.15f, 0.05f);
 		}
-		if (i == 12) { //right3 row paddle
+		if (i == 11) { //right3 row paddle
 			translate(MODEL, boat.position[0], 0.0f, boat.position[2]);
 			rotate(MODEL, boat.angle, 0, 1, 0);
 			translate(MODEL, 0.0f, 0.15f, 0.0f);
@@ -928,9 +1040,8 @@ void renderScene(void) {
 			scale(MODEL, 0.1f, 0.15f, 0.05f);
 		}
 
-		if (i > 12) {
+		if (i >= 12) {
 			translate(MODEL, buoy_positions[buoy][0], 0.0f, buoy_positions[buoy][1]);
-			buoy++;
 		}
 
 
@@ -942,15 +1053,24 @@ void renderScene(void) {
 		glUniformMatrix3fv(normal_uniformId, 1, GL_FALSE, mNormal3x3);
 
 		// Render mesh
-		glBindVertexArray(myMeshes[i].vao);
+		glBindVertexArray(myMeshes[i-buoy].vao);
 		if (i == 0) {
 			glUniform1i(texMode_uniformId, 1);
 		}
-		else glUniform1i(texMode_uniformId, 0);
-
-		glDrawElements(myMeshes[i].type, myMeshes[i].numIndexes, GL_UNSIGNED_INT, 0);
+		else if (i == 5) {
+			glUniform1i(texMode_uniformId, 3);
+		}
+		else  {
+			glUniform1i(texMode_uniformId, 0);
+		}
+		
+		glDrawElements(myMeshes[i - buoy].type, myMeshes[i - buoy].numIndexes, GL_UNSIGNED_INT, 0);
 		glBindVertexArray(0);
 
+		if (i >= 12) buoy++;
+		if (i == 5) {
+			popMatrix(MODEL);
+		}
 		popMatrix(MODEL);
 	}
 	renderFish();
@@ -981,9 +1101,71 @@ void renderScene(void) {
 		popMatrix(VIEW);
 	}
 
+	if (fireworks) {
+		float particle_color[4];
+		updateParticles();
+
+		// draw fireworks particles
+		glActiveTexture(GL_TEXTURE0);
+		glBindTexture(GL_TEXTURE_2D, TextureArray[3]); //particle.tga associated to TU0 
+
+		glEnable(GL_BLEND);
+		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+		glDepthMask(GL_FALSE);  //Depth Buffer Read Only
+
+		glUniform1i(texMode_uniformId, 2); // draw modulated textured particles 
+		glUniform1i(tex_loc, 0);
+
+		for (int i = 0; i < MAX_PARTICULAS; i++)
+		{
+			if (particula[i].life > 0.0f) /* só desenha as que ainda estão vivas */
+			{
+
+				/* A vida da partícula representa o canal alpha da cor. Como o blend está activo a cor final é a soma da cor rgb do fragmento multiplicada pelo
+				alpha com a cor do pixel destino */
+
+				particle_color[0] = particula[i].r;
+				particle_color[1] = particula[i].g;
+				particle_color[2] = particula[i].b;
+				particle_color[3] = particula[i].life;
+
+				// send the material - diffuse color modulated with texture
+				loc = glGetUniformLocation(shader.getProgramIndex(), "mat.diffuse");
+				glUniform4fv(loc, 1, particle_color);
+
+				pushMatrix(MODEL);
+				translate(MODEL, particula[i].x, particula[i].y, particula[i].z);
+
+				// send matrices to OGL
+				computeDerivedMatrix(PROJ_VIEW_MODEL);
+				glUniformMatrix4fv(vm_uniformId, 1, GL_FALSE, mCompMatrix[VIEW_MODEL]);
+				glUniformMatrix4fv(pvm_uniformId, 1, GL_FALSE, mCompMatrix[PROJ_VIEW_MODEL]);
+				computeNormalMatrix3x3();
+				glUniformMatrix3fv(normal_uniformId, 1, GL_FALSE, mNormal3x3);
+
+				glBindVertexArray(myMeshes[14].vao);
+				glDrawElements(myMeshes[14].type, myMeshes[14].numIndexes, GL_UNSIGNED_INT, 0);
+				popMatrix(MODEL);
+			}
+			else dead_num_particles++;
+		}
+
+		glDepthMask(GL_TRUE); //make depth buffer again writeable
+
+		if (dead_num_particles == MAX_PARTICULAS) {
+			fireworks = 0;
+			dead_num_particles = 0;
+			printf("All particles dead\n");
+		}
+
+	}
+	glBindVertexArray(0);
+	glBindTexture(GL_TEXTURE_2D, 0);
+	glDisable(GL_BLEND);
+
 	renderHUD();
 
-	glBindTexture(GL_TEXTURE_2D, 0);
 	glutSwapBuffers();
 }
 
@@ -1082,6 +1264,10 @@ void processKeys(unsigned char key, int xx, int yy)
 
 		case 'p':
 			isPaused = !isPaused;
+			break;
+		case 't':
+			fireworks = 1;
+			iniParticles();
 			break;
 
 		case 'r':
@@ -1301,9 +1487,11 @@ void init()
 	cams[2].camPos[1] = r * sin(beta * 3.14f / 180.0f);
 	cams[2].camPos[2] = -r;
 
-	glGenTextures(2, TextureArray);
+	glGenTextures(4, TextureArray);
 	Texture2D_Loader(TextureArray, "img/azure-blue-paint-diffusing-with-water.jpg", 0);
 	Texture2D_Loader(TextureArray, "img/clear-ocean-water-texture.jpg", 1);
+	Texture2D_Loader(TextureArray, "billboards/tree.tga", 2);
+	Texture2D_Loader(TextureArray, "billboards/particle.tga", 3);
 
 	//Flare elements textures
 	glGenTextures(5, FlareTextureArray);
@@ -1312,6 +1500,10 @@ void init()
 	Texture2D_Loader(FlareTextureArray, "hxgn.tga", 2);
 	Texture2D_Loader(FlareTextureArray, "ring.tga", 3);
 	Texture2D_Loader(FlareTextureArray, "sun.tga", 4);
+
+	//tree specular color
+	float tree_spec[] = { 0.2f, 0.2f, 0.2f, 1.0f };
+	float tree_shininess = 10.0f;
 
 	// create geometry and VAO of the water plane
 	float amb0[] = { 0.2f, 0.3f, 0.7f, 1.0f };
@@ -1396,27 +1588,11 @@ void init()
 	float spec3[] = { 0.2f, 0.1f, 0.05f, 1.0f };
 	shininess = 10.0f;
 
-	amesh = createCylinder(0.5f, 0.2f, 20);
-	memcpy(amesh.mat.ambient, amb3, 4 * sizeof(float));
-	memcpy(amesh.mat.diffuse, diff3, 4 * sizeof(float));
-	memcpy(amesh.mat.specular, spec3, 4 * sizeof(float));
+	// create geometry and VAO of the quad for trees
+	amesh = createQuad(6, 6);
+	memcpy(amesh.mat.specular, tree_spec, 4 * sizeof(float));
 	memcpy(amesh.mat.emissive, emissive, 4 * sizeof(float));
-	amesh.mat.shininess = shininess;
-	amesh.mat.texCount = texcount;
-	myMeshes.push_back(amesh);
-
-	// create geometry and VAO of the cone foliage
-	float amb4[] = { 0.05f, 0.2f, 0.05f, 1.0f };
-	float diff4[] = { 0.1f, 0.4f, 0.1f, 1.0f };
-	float spec4[] = { 0.05f, 0.2f, 0.05f, 1.0f };
-	shininess = 5.0f;
-
-	amesh = createCone(1.0f, 0.5f, 20);
-	memcpy(amesh.mat.ambient, amb4, 4 * sizeof(float));
-	memcpy(amesh.mat.diffuse, diff4, 4 * sizeof(float));
-	memcpy(amesh.mat.specular, spec4, 4 * sizeof(float));
-	memcpy(amesh.mat.emissive, emissive, 4 * sizeof(float));
-	amesh.mat.shininess = shininess;
+	amesh.mat.shininess = tree_shininess;
 	amesh.mat.texCount = texcount;
 	myMeshes.push_back(amesh);
 
@@ -1465,8 +1641,6 @@ void init()
 	amesh.mat.texCount = texcount;
 	fishMeshes.push_back(amesh);
 
-
-	
 
 	// create geometry and VAO of the sleigh
 	// create geometry and VAO of the boat
@@ -1523,11 +1697,15 @@ void init()
 	amesh.mat.shininess = shininess;
 	amesh.mat.texCount = texcount;
 	// for 6 buoys
-	for (int i = 0; i < 6; i++) 
-		myMeshes.push_back(amesh);
+	myMeshes.push_back(amesh);
 
 	// create geometry and VAO of the quad for flare elements
 	amesh = createCube(); // created a cube because quad was not rendering a flare
+	myMeshes.push_back(amesh);
+
+	// create geometry and VAO of the quad for particles
+	amesh = createQuad(2, 2);
+	amesh.mat.texCount = texcount;
 	myMeshes.push_back(amesh);
 
 	//Load flare from file
