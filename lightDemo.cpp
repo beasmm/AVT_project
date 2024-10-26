@@ -384,7 +384,7 @@ void timer(int value)
 	oss << CAPTION << ": " << FrameCount << " FPS @ (" << WinX << "x" << WinY << ")";
 	std::string s = oss.str();
 
-	play_time++;
+	if (!isPaused) play_time++;
 
 	glutSetWindow(WindowHandle);
 	glutSetWindowTitle(s.c_str());
