@@ -73,7 +73,7 @@ void main() {
 		else if (texMode == 1) {
 			texel = texture(texmap, DataIn.tex_coord); 
 			texel1 = texture(texmap1, DataIn.tex_coord);
-			colorAux += max(intensity*texel*texel1 + spec, 0.07*texel*texel1);
+			colorAux += vec4(max(intensity*texel*texel1 + spec, 0.07*texel*texel1).rgb, mat.diffuse.a);
 		}
 		else if (texMode == 3) {
 			texel2 = texture(texmap2, DataIn.tex_coord); 
@@ -85,13 +85,13 @@ void main() {
 		if (texMode == 1) {
 			texel = texture(texmap, DataIn.tex_coord); 
 			texel1 = texture(texmap1, DataIn.tex_coord);
-			colorAux += 0.07*texel*texel1;
+			colorAux += vec4((0.07*texel*texel1).rgb, mat.diffuse.a);
 		}
 		else if (texMode == 3) {
 			texel2 = texture(texmap2, DataIn.tex_coord); 
 			if(texel2.a == 0.0) discard;
 			else
-				colorAux += 0.1*texel2;
+				colorAux = vec4(texel2.rgb*0.1, 0.8);
 		}
 
 	}
@@ -113,6 +113,7 @@ void main() {
 				texel = texture(texmap, DataIn.tex_coord);
 				texel1 = texture(texmap1, DataIn.tex_coord);
 				colorPoint += max(intensity*texel*texel1 + spec, 0.07*texel*texel1);
+				colorPoint = vec4(colorPoint.rgb, mat.diffuse.a);
 			}
 			else if (texMode == 3) {
 				texel2 = texture(texmap2, DataIn.tex_coord); 
@@ -146,6 +147,7 @@ void main() {
 					texel = texture(texmap, DataIn.tex_coord);  
 					texel1 = texture(texmap1, DataIn.tex_coord); 
 					colorSpot += max(intensity*texel*texel1 + spec, 0.07*texel*texel1);
+					colorSpot = vec4(colorSpot.rgb, mat.diffuse.a);
 				}
 				else if (texMode == 3) {
 					texel2 = texture(texmap2, DataIn.tex_coord); 
@@ -170,7 +172,7 @@ void main() {
 		texel = texture(texmap, DataIn.tex_coord);  //texel from element flare texture
 		if(texel.a == 0.0) discard;
 		else
-			colorOut = mat.diffuse * texel * 0.5f;
+			colorOut = mat.diffuse * texel;
 	}
 		
 }

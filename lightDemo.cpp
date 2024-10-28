@@ -114,7 +114,7 @@ public:
 	int type = 0;
 };
 
-Camera cams[3];
+Camera cams[4];
 
 class Boat {
 public:
@@ -181,7 +181,9 @@ float buoy_positions[6][2] = {
 
 // lights
 float directionalLightDir[4] = { -1.0f, -1.0f, -1.0f, 0.0f };
+float reverseDirectionalLightDir[4] = { 1.0f, -1.0f, -1.0f, 0.0f };
 float pointLightPos[6][4];
+float r_pointLightPos[6][4];
 float spotLightPos[2][4] = {
 	{-0.1f, 0.2f, 0.8f, 1.0f },
 	{ 0.1f, 0.2f, 0.8f, 1.0f }
@@ -377,6 +379,16 @@ void setupPointLightPos() {
 		pointLightPos[i][3] = 1.0f;
 	}
 }
+
+void setupReversePointLightPos() {
+	for (int i = 0; i < 6; i++) {
+		r_pointLightPos[i][0] = -buoy_positions[i][0];
+		r_pointLightPos[i][1] = 0.71f;
+		r_pointLightPos[i][2] = buoy_positions[i][1];
+		r_pointLightPos[i][3] = 1.0f;
+	}
+}
+
 
 void timer(int value)
 {
@@ -588,8 +600,14 @@ void refresh(int value)
 		cams[2].camPos[2] = boat.position[2] - r * cos(angle_rad) ;
 
 		cams[2].camTarget[0] = boat.position[0];
-		cams[2].camTarget[1] = 0.0f;
+		cams[2].camTarget[1] = 1.0f;
 		cams[2].camTarget[2] = boat.position[2];
+
+		cams[3].camPos[0] = boat.position[0];
+		cams[3].camPos[2] = boat.position[2] - 1.0f;
+
+		cams[3].camTarget[0] = boat.position[0] - r * sin(angle_rad);
+		cams[3].camTarget[2] = boat.position[2] - r * cos(angle_rad);
 
 	
 		if (isCollidingWithIsland(boatAABB)) {
@@ -623,6 +641,45 @@ void changeSize(int w, int h) {
 		h = 1;
 	// set the viewport to be the entire window
 	glViewport(0, 0, w, h);
+
+	/* create a diamond shaped stencil area */
+	loadIdentity(PROJECTION);
+	if (w <= h)
+		ortho(0, w, 0, h, -10, 10);
+	else
+		ortho(-2.0 * (GLfloat)w / (GLfloat)h,
+			2.0 * (GLfloat)w / (GLfloat)h, -2.0, 2.0, -10, 10);
+
+	// load identity matrices for Model-View
+	loadIdentity(VIEW);
+	loadIdentity(MODEL);
+
+	glUseProgram(shader.getProgramIndex());
+
+	//não vai ser preciso enviar o material pois o cubo não é desenhado
+
+	//rotate(MODEL, 45.0f, 0.0, 0.0, 1.0);
+	printf("height %d\n", h);
+	printf("width %d\n", w);
+	translate(MODEL, 0, 1.5, 0);
+	scale(MODEL, 2, 1, 1.0);
+	// send matrices to OGL
+	computeDerivedMatrix(PROJ_VIEW_MODEL);
+	//glUniformMatrix4fv(vm_uniformId, 1, GL_FALSE, mCompMatrix[VIEW_MODEL]);
+	glUniformMatrix4fv(pvm_uniformId, 1, GL_FALSE, mCompMatrix[PROJ_VIEW_MODEL]);
+	computeNormalMatrix3x3();
+	glUniformMatrix3fv(normal_uniformId, 1, GL_FALSE, mNormal3x3);
+
+	glClear(GL_STENCIL_BUFFER_BIT);
+	glEnable(GL_STENCIL_TEST);
+
+	glStencilFunc(GL_NEVER, 0x1, 0x1);
+	glStencilOp(GL_REPLACE, GL_KEEP, GL_KEEP);
+
+	glBindVertexArray(myMeshes[13].vao);
+	glDrawElements(myMeshes[13].type, myMeshes[13].numIndexes, GL_UNSIGNED_INT, 0);
+	glBindVertexArray(0);
+
 	// set the projection matrix
 	ratio = (1.0f * w) / h;
 	loadIdentity(PROJECTION);
@@ -685,7 +742,7 @@ void renderFish() {
 // Render stufff
 //
 
-void renderFlare(FLARE_DEF* flare, int lX, int lY, int* m_viewport) {  //lX, lY represent the projected position of light on viewport
+void renderFlare(FLARE_DEF* flare, int lX, int lY, int* m_viewport, bool rearView) {  //lX, lY represent the projected position of light on viewport
 
 	int     dx, dy;          // Screen coordinates of "destination"
 	int     px, py;          // Screen coordinates of flare element
@@ -725,46 +782,58 @@ void renderFlare(FLARE_DEF* flare, int lX, int lY, int* m_viewport) {  //lX, lY 
 	glUniform1i(texMode_uniformId, 2); // draw modulated textured particles 
 	glUniform1i(tex_loc, 0);  //use TU 0
 
-	for (i = 0; i < flare->nPieces; ++i)
-	{
-		// Position is interpolated along line between start and destination.
-		px = (int)((1.0f - flare->element[i].fDistance) * lX + flare->element[i].fDistance * dx);
-		py = (int)((1.0f - flare->element[i].fDistance) * lY + flare->element[i].fDistance * dy);
-		px = clampi(px, m_viewport[0], screenMaxCoordX);
-		py = clampi(py, m_viewport[1], screenMaxCoordY);
+	int camID;
+	if (rearView) camID = 3;
+	else camID = active;
+	float camDir[3] = { cams[camID].camTarget[0] - cams[camID].camPos[0],
+				   cams[camID].camTarget[1] - cams[camID].camPos[1],
+				   cams[camID].camTarget[2] - cams[camID].camPos[2] };
+	normalize(camDir); 
+	
+	float dotProduct = camDir[0] * directionalLightDir[0] + camDir[1] * directionalLightDir[1] + camDir[2] * directionalLightDir[2];
 
-		// Piece size are 0 to 1; flare size is proportion of screen width; scale by flaredist/maxflaredist.
-		width = (int)(scaleDistance * flarescale * flare->element[i].fSize);
-
-		// Width gets clamped, to allows the off-axis flaresto keep a good size without letting the elements get big when centered.
-		if (width > flaremaxsize)  width = flaremaxsize;
-
-		height = (int)((float)m_viewport[3] / (float)m_viewport[2] * (float)width);
-		memcpy(diffuse, flare->element[i].matDiffuse, 4 * sizeof(float));
-		diffuse[3] *= scaleDistance;   //scale the alpha channel
-
-		if (width > 1)
+	if (dotProduct < 0.0f) {
+		for (i = 0; i < flare->nPieces; ++i)
 		{
-			// send the material - diffuse color modulated with texture
-			loc = glGetUniformLocation(shader.getProgramIndex(), "mat.diffuse");
-			glUniform4fv(loc, 1, diffuse);
+			// Position is interpolated along line between start and destination.
+			px = (int)((1.0f - flare->element[i].fDistance) * lX + flare->element[i].fDistance * dx);
+			py = (int)((1.0f - flare->element[i].fDistance) * lY + flare->element[i].fDistance * dy);
+			px = clampi(px, m_viewport[0], screenMaxCoordX);
+			py = clampi(py, m_viewport[1], screenMaxCoordY);
 
-			glActiveTexture(GL_TEXTURE0);
-			glBindTexture(GL_TEXTURE_2D, FlareTextureArray[flare->element[i].textureId]);
+			// Piece size are 0 to 1; flare size is proportion of screen width; scale by flaredist/maxflaredist.
+			width = (int)(scaleDistance * flarescale * flare->element[i].fSize);
 
-			pushMatrix(MODEL);
-			translate(MODEL, (float)(px - width * 0.0f), (float)(py - height * 0.0f), 0.0f);
-			scale(MODEL, (float)width, (float)height, 1);
-			computeDerivedMatrix(PROJ_VIEW_MODEL);
-			glUniformMatrix4fv(vm_uniformId, 1, GL_FALSE, mCompMatrix[VIEW_MODEL]);
-			glUniformMatrix4fv(pvm_uniformId, 1, GL_FALSE, mCompMatrix[PROJ_VIEW_MODEL]);
-			computeNormalMatrix3x3();
-			glUniformMatrix3fv(normal_uniformId, 1, GL_FALSE, mNormal3x3);
+			// Width gets clamped, to allows the off-axis flaresto keep a good size without letting the elements get big when centered.
+			if (width > flaremaxsize)  width = flaremaxsize;
 
-			glBindVertexArray(myMeshes[13].vao);
-			glDrawElements(myMeshes[13].type, myMeshes[13].numIndexes, GL_UNSIGNED_INT, 0);
-			glBindVertexArray(0);
-			popMatrix(MODEL);
+			height = (int)((float)m_viewport[3] / (float)m_viewport[2] * (float)width);
+			memcpy(diffuse, flare->element[i].matDiffuse, 4 * sizeof(float));
+			diffuse[3] *= scaleDistance;   //scale the alpha channel
+
+			if (width > 1)
+			{
+				// send the material - diffuse color modulated with texture
+				loc = glGetUniformLocation(shader.getProgramIndex(), "mat.diffuse");
+				glUniform4fv(loc, 1, diffuse);
+
+				glActiveTexture(GL_TEXTURE0);
+				glBindTexture(GL_TEXTURE_2D, FlareTextureArray[flare->element[i].textureId]);
+
+				pushMatrix(MODEL);
+				translate(MODEL, (float)(px - width * 0.0f), (float)(py - height * 0.0f), 0.0f);
+				scale(MODEL, (float)width, (float)height, 1);
+				computeDerivedMatrix(PROJ_VIEW_MODEL);
+				glUniformMatrix4fv(vm_uniformId, 1, GL_FALSE, mCompMatrix[VIEW_MODEL]);
+				glUniformMatrix4fv(pvm_uniformId, 1, GL_FALSE, mCompMatrix[PROJ_VIEW_MODEL]);
+				computeNormalMatrix3x3();
+				glUniformMatrix3fv(normal_uniformId, 1, GL_FALSE, mNormal3x3);
+
+				glBindVertexArray(myMeshes[13].vao);
+				glDrawElements(myMeshes[13].type, myMeshes[13].numIndexes, GL_UNSIGNED_INT, 0);
+				glBindVertexArray(0);
+				popMatrix(MODEL);
+			}
 		}
 	}
 	glEnable(GL_DEPTH_TEST);
@@ -827,95 +896,9 @@ void Lookup(int i) {
 	ly += 0.01 * i;
 }
 
-void renderScene(void) {
-
-	GLint loc;
-
-	FrameCount++;
-	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-	// load identity matrices
-	loadIdentity(VIEW);
-	loadIdentity(MODEL);
-
-	// set the cameras
-	GLint m_view[4];
-
-	lookAt(cams[active].camPos[0], cams[active].camPos[1], cams[active].camPos[2],
-		cams[active].camTarget[0], cams[active].camTarget[1], cams[active].camTarget[2],
-		0.0f, 1.0f, 0.0f);
-	glGetIntegerv(GL_VIEWPORT, m_view);
-	float ratio = (float)(m_view[2] - m_view[0]) / (float)(m_view[3] - m_view[1]);
-
-	loadIdentity(PROJECTION);
-
-	if (cams[active].type == PERSPECTIVE) {
-		perspective(53.13f, ratio, 0.1f, 1000.0f);
-	}
-	else if (cams[active].type == ORTHOGONAL) {
-		ortho(ratio*(-25), ratio*25, -25, 25, 0.1f, 1000.0f);
-	}
-
-	// use our shader
-	
-	glUseProgram(shader.getProgramIndex());
-
-	//send the light position in eye coordinates
-	//glUniform4fv(lPos_uniformId, 1, lightPos); //efeito capacete do mineiro, ou seja lighPos foi definido em eye coord 
-
-	float res[4];
-	//multMatrixPoint(VIEW, lightPos,res);   //lightPos definido em World Coord so is converted to eye space
-	//glUniform4fv(lPos_uniformId, 1, res);
-	loc = glGetUniformLocation(shader.getProgramIndex(), "isDay");
-	if (isDay == true)
-		glUniform1i(loc, 1);
-	else
-		glUniform1i(loc, 0);
-
-	loc = glGetUniformLocation(shader.getProgramIndex(), "pointLightsOn");
-	if (pointLightsOn == true)
-		glUniform1i(loc, 1);
-	else
-		glUniform1i(loc, 0);
-
-	loc = glGetUniformLocation(shader.getProgramIndex(), "spotLightsOn");
-	if (spotLightsOn == true)
-		glUniform1i(loc, 1);
-	else
-		glUniform1i(loc, 0);
-
-
-	loc = glGetUniformLocation(shader.getProgramIndex(), "fogEffectOn");
-	if (fogEffectOn == true)
-		glUniform1i(loc, 1);
-	else
-		glUniform1i(loc, 0);
-
-	loc = glGetUniformLocation(shader.getProgramIndex(), "spotCosCutOff");
-	glUniform1f(loc, 0.93f);
-
-	//Send the directional light position
-	GLint ldirpos = glGetUniformLocation(shader.getProgramIndex(), "dir_pos");
-	multMatrixPoint(VIEW, directionalLightDir, res);
-	glUniform4fv(ldirpos, 1, res);
-
-	//send the point light positions
-	for (int i = 0; i < 6; i++) {
-		multMatrixPoint(VIEW, pointLightPos[i], res);
-		glUniform4fv(lPos_uniformId[i], 1, res);
-	}
-
-	for (int i = 0; i < 2; i++) {
-		multMatrixPoint(VIEW, spotLightPos[i], res);
-		glUniform4fv(lPos_uniformId[6 + i], 1, res);
-	}
-
-	loc = glGetUniformLocation(shader.getProgramIndex(), "coneDir");
-	multMatrixPoint(VIEW, coneDir, res);
-	glUniform4fv(loc, 1, res);
-
-	int buoy = 0;
-
-	// Associar os Texture Units aos Objects Texture
+void draw_water() {
+	glEnable(GL_BLEND);
+	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
 	glActiveTexture(GL_TEXTURE0);
 	glBindTexture(GL_TEXTURE_2D, TextureArray[0]);
@@ -923,15 +906,53 @@ void renderScene(void) {
 	glActiveTexture(GL_TEXTURE1);
 	glBindTexture(GL_TEXTURE_2D, TextureArray[1]);
 
+	glUniform1i(tex_loc, 0);
+	glUniform1i(tex_loc1, 1);
+
+	GLint loc;
+	loc = glGetUniformLocation(shader.getProgramIndex(), "mat.ambient");
+	glUniform4fv(loc, 1, myMeshes[0].mat.ambient);
+	loc = glGetUniformLocation(shader.getProgramIndex(), "mat.diffuse");
+	glUniform4fv(loc, 1, myMeshes[0].mat.diffuse);
+	loc = glGetUniformLocation(shader.getProgramIndex(), "mat.specular");
+	glUniform4fv(loc, 1, myMeshes[0].mat.specular);
+	loc = glGetUniformLocation(shader.getProgramIndex(), "mat.shininess");
+	glUniform1f(loc, myMeshes[0].mat.shininess);
+
+	pushMatrix(MODEL);
+	translate(MODEL, 0.0f, -25.0f, 0.0f);
+	scale(MODEL, 100.0f, 50.0f, 100.0f);
+
+	computeDerivedMatrix(PROJ_VIEW_MODEL);
+	glUniformMatrix4fv(vm_uniformId, 1, GL_FALSE, mCompMatrix[VIEW_MODEL]);
+	glUniformMatrix4fv(pvm_uniformId, 1, GL_FALSE, mCompMatrix[PROJ_VIEW_MODEL]);
+	computeNormalMatrix3x3();
+	glUniformMatrix3fv(normal_uniformId, 1, GL_FALSE, mNormal3x3);
+
+	// Render mesh
+	glBindVertexArray(myMeshes[0].vao);
+	glUniform1i(texMode_uniformId, 1);
+	glDrawElements(myMeshes[0].type, myMeshes[0].numIndexes, GL_UNSIGNED_INT, 0);
+	glBindVertexArray(0);
+
+	glDisable(GL_BLEND);
+}
+
+void renderMainScene(bool rearView) {
+	GLint loc;
+
+	//Send the directional light position
+	int buoy = 0;
+
+	// Associar os Texture Units aos Objects Texture
 	glActiveTexture(GL_TEXTURE2);
 	glBindTexture(GL_TEXTURE_2D, TextureArray[2]);
 
 	//Indicar aos tres samplers do GLSL quais os Texture Units a serem usados
-	glUniform1i(tex_loc, 0);
-	glUniform1i(tex_loc1, 1);
 	glUniform1i(tex_loc2, 2);
 
-	for (int i = 0; i < 18; ++i) {
+	for (int i = 1; i < 18; ++i) {
+		if (rearView && i >= 6 && i <= 11) continue; //don't render boat
 
 		// send the material
 		loc = glGetUniformLocation(shader.getProgramIndex(), "mat.ambient");
@@ -942,10 +963,16 @@ void renderScene(void) {
 		glUniform4fv(loc, 1, myMeshes[i-buoy].mat.specular);
 		loc = glGetUniformLocation(shader.getProgramIndex(), "mat.shininess");
 		glUniform1f(loc, myMeshes[i-buoy].mat.shininess);
+
+
 		pushMatrix(MODEL);
 
+		if (rearView) scale(MODEL, 1.0, 1.0, -1.0);
 
-		if (i == 1) translate(MODEL, -10.0f, 0.01f, 0.0f); //island
+		if (i == 1) {
+			translate(MODEL, -10.0f, -4.99f, 0.0f); //island
+			scale(MODEL, 10.0f, 10.0f, 10.0f);
+		}
 
 		// fix house base offset
 		if (i == 2) translate(MODEL, -12.5f, 0.5f, -0.5f);
@@ -963,7 +990,11 @@ void renderScene(void) {
 
 			translate(MODEL, -9.0f, 0.25f, 2.0f);
 
-			float cam[3] = { cams[active].camPos[0], cams[active].camPos[1], cams[active].camPos[2] };
+			int camID;
+			if (rearView) camID = 4;
+			else camID = active;
+			
+			float cam[3] = { cams[camID].camPos[0], cams[camID].camPos[1], cams[camID].camPos[2] };
 			float pos[3] = { -9.0f, 0.25f, 2.0f };
 
 			l3dBillboardCylindricalBegin(cam, pos);
@@ -985,6 +1016,7 @@ void renderScene(void) {
 			rotate(MODEL, boat.angle, 0, 1, 0);
 			scale(MODEL, 0.4f, 0.2f, 0.7f);
 		}
+
 		if (i == 7) { // boat front
 			translate(MODEL, boat.position[0], 0.1, boat.position[2]);
 			rotate(MODEL, boat.angle, 0, 1, 0);
@@ -1043,7 +1075,13 @@ void renderScene(void) {
 		if (i >= 12) {
 			translate(MODEL, buoy_positions[buoy][0], 0.0f, buoy_positions[buoy][1]);
 		}
-
+		if (i == 18) {
+			// draw sphere where the stencil is 1 
+			scale(MODEL, 10, 10, 10);
+			glBindVertexArray(myMeshes[4].vao);
+			glDrawElements(myMeshes[4].type, myMeshes[4].numIndexes, GL_UNSIGNED_INT, 0);
+			glBindVertexArray(0);
+		}
 
 		// send matrices to OGL
 		computeDerivedMatrix(PROJ_VIEW_MODEL);
@@ -1054,10 +1092,7 @@ void renderScene(void) {
 
 		// Render mesh
 		glBindVertexArray(myMeshes[i-buoy].vao);
-		if (i == 0) {
-			glUniform1i(texMode_uniformId, 1);
-		}
-		else if (i == 5) {
+		if (i == 5) {
 			glUniform1i(texMode_uniformId, 3);
 		}
 		else  {
@@ -1070,6 +1105,7 @@ void renderScene(void) {
 		if (i >= 12) buoy++;
 		if (i == 5) {
 			popMatrix(MODEL);
+			glDisable(GL_BLEND);
 		}
 		popMatrix(MODEL);
 	}
@@ -1096,7 +1132,7 @@ void renderScene(void) {
 		pushMatrix(VIEW);
 		loadIdentity(VIEW);
 		ortho(m_viewport[0], m_viewport[0] + m_viewport[2] - 1, m_viewport[1], m_viewport[1] + m_viewport[3] - 1, -1, 1);
-		renderFlare(&AVTflare, flarePos[0], flarePos[1], m_viewport);
+		renderFlare(&AVTflare, flarePos[0], flarePos[1], m_viewport, rearView);
 		popMatrix(PROJECTION);
 		popMatrix(VIEW);
 	}
@@ -1163,8 +1199,158 @@ void renderScene(void) {
 	glBindVertexArray(0);
 	glBindTexture(GL_TEXTURE_2D, 0);
 	glDisable(GL_BLEND);
+}
 
+
+void renderScene(void) {
+	FrameCount++;
+
+	GLint loc;
+	float res[4];
+	// set the cameras
+	GLint m_view[4];
+
+	int windowWidth = glutGet(GLUT_WINDOW_WIDTH);
+	int windowHeight = glutGet(GLUT_WINDOW_HEIGHT);
+
+	glViewport(0, 0, windowWidth, windowHeight);
+
+	glEnable(GL_STENCIL_TEST);
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+	// load identity matrices
+	loadIdentity(VIEW);
+	loadIdentity(MODEL);
+
+	lookAt(cams[active].camPos[0], cams[active].camPos[1], cams[active].camPos[2],
+		cams[active].camTarget[0], cams[active].camTarget[1], cams[active].camTarget[2],
+		0.0f, 1.0f, 0.0f);
+	glGetIntegerv(GL_VIEWPORT, m_view);
+	float ratio = (float)(m_view[2] - m_view[0]) / (float)(m_view[3] - m_view[1]);
+
+	loadIdentity(PROJECTION);
+
+	if (cams[active].type == PERSPECTIVE) {
+		perspective(53.13f, ratio, 0.1f, 1000.0f);
+	}
+	else if (cams[active].type == ORTHOGONAL) {
+		ortho(ratio * (-25), ratio * 25, -25, 25, 0.1f, 1000.0f);
+	}
+	glStencilFunc(GL_EQUAL, 0x0, 0x1);
+	glStencilOp(GL_KEEP, GL_KEEP, GL_KEEP);
+
+	GLint ldirpos = glGetUniformLocation(shader.getProgramIndex(), "dir_pos");
+
+	multMatrixPoint(VIEW, directionalLightDir, res);
+	glUniform4fv(ldirpos, 1, res);
+
+	glUseProgram(shader.getProgramIndex());
+
+	loc = glGetUniformLocation(shader.getProgramIndex(), "isDay");
+	if (isDay == true)
+		glUniform1i(loc, 1);
+	else
+		glUniform1i(loc, 0);
+
+	loc = glGetUniformLocation(shader.getProgramIndex(), "pointLightsOn");
+	if (pointLightsOn == true)
+		glUniform1i(loc, 1);
+	else
+		glUniform1i(loc, 0);
+
+	loc = glGetUniformLocation(shader.getProgramIndex(), "spotLightsOn");
+	if (spotLightsOn == true)
+		glUniform1i(loc, 1);
+	else
+		glUniform1i(loc, 0);
+
+
+	loc = glGetUniformLocation(shader.getProgramIndex(), "fogEffectOn");
+	if (fogEffectOn == true)
+		glUniform1i(loc, 1);
+	else
+		glUniform1i(loc, 0);
+
+	loc = glGetUniformLocation(shader.getProgramIndex(), "spotCosCutOff");
+	glUniform1f(loc, 0.93f);
+
+	//send the point light positions
+	for (int i = 0; i < 6; i++) {
+		multMatrixPoint(VIEW, pointLightPos[i], res);
+		glUniform4fv(lPos_uniformId[i], 1, res);
+	}
+
+	for (int i = 0; i < 2; i++) {
+		multMatrixPoint(VIEW, spotLightPos[i], res);
+		glUniform4fv(lPos_uniformId[6 + i], 1, res);
+	}
+	loc = glGetUniformLocation(shader.getProgramIndex(), "coneDir");
+	multMatrixPoint(VIEW, coneDir, res);
+	glUniform4fv(loc, 1, res);
+
+	renderMainScene(false);
+	glDepthMask(GL_FALSE);
+	draw_water();
+	glDepthMask(GL_TRUE);
 	renderHUD();
+
+
+	// REARVIEWTIME
+	glClear(GL_DEPTH_BUFFER_BIT);
+
+	glViewport(windowWidth / 2 - 200, windowHeight - 200, 400, 200);
+
+	glStencilFunc(GL_EQUAL, 0x1, 0x1);
+	glStencilOp(GL_KEEP, GL_KEEP, GL_KEEP);
+
+	loadIdentity(VIEW);
+	loadIdentity(MODEL);
+
+	lookAt(cams[3].camPos[0], cams[3].camPos[1], cams[3].camPos[2],
+		cams[3].camTarget[0], cams[3].camTarget[1], cams[3].camTarget[2],
+		0.0f, 1.0f, 0.0f);
+	glGetIntegerv(GL_VIEWPORT, m_view);
+	ratio = (float)(m_view[2] - m_view[0]) / (float)(m_view[3] - m_view[1]);
+
+	loadIdentity(PROJECTION);
+	
+	perspective(53.13f, ratio, 0.1f, 1000.0f);
+
+	ldirpos = glGetUniformLocation(shader.getProgramIndex(), "dir_pos");
+
+	multMatrixPoint(VIEW, directionalLightDir, res);
+	glUniform4fv(ldirpos, 1, res);
+
+	glUseProgram(shader.getProgramIndex());
+
+	loc = glGetUniformLocation(shader.getProgramIndex(), "isDay");
+	if (isDay == true)
+		glUniform1i(loc, 1);
+	else
+		glUniform1i(loc, 0);
+
+	loc = glGetUniformLocation(shader.getProgramIndex(), "pointLightsOn");
+	if (pointLightsOn == true)
+		glUniform1i(loc, 1);
+	else
+		glUniform1i(loc, 0);
+
+	loc = glGetUniformLocation(shader.getProgramIndex(), "fogEffectOn");
+	if (fogEffectOn == true)
+		glUniform1i(loc, 1);
+	else
+		glUniform1i(loc, 0);
+
+	//send the point light positions
+	for (int i = 0; i < 6; i++) {
+		multMatrixPoint(VIEW, r_pointLightPos[i], res);
+		glUniform4fv(lPos_uniformId[i], 1, res);
+	}
+
+	renderMainScene(true);
+	glDepthMask(GL_FALSE);
+	draw_water();
+	glDepthMask(GL_TRUE);
+	glDisable(GL_STENCIL_TEST);
 
 	glutSwapBuffers();
 }
@@ -1460,6 +1646,15 @@ void initCams() {
 	cams[0].type = ORTHOGONAL;
 	cams[1].type = PERSPECTIVE;
 	cams[2].type = PERSPECTIVE;
+	cams[3].type = PERSPECTIVE;
+
+	cams[3].camPos[0] = boat.position[0];
+	cams[3].camPos[1] = 1.5f;
+	cams[3].camPos[2] = boat.position[2] - 1.0f;
+
+	cams[3].camTarget[0] = boat.position[0] - 10;
+	cams[3].camTarget[1] = 1.0f;
+	cams[3].camTarget[2] = boat.position[2] - 10;
 	return;
 }
 
@@ -1468,6 +1663,7 @@ void init()
 {
 	// set the lights
 	setupPointLightPos();
+	setupReversePointLightPos();
 
 	MyMesh amesh;
 
@@ -1506,14 +1702,14 @@ void init()
 	float tree_shininess = 10.0f;
 
 	// create geometry and VAO of the water plane
-	float amb0[] = { 0.2f, 0.3f, 0.7f, 1.0f };
-	float diff0[] = { 0.4f, 0.6f, 0.9f, 1.0f };
+	float amb0[] = { 0.2f, 0.3f, 0.7f, 0.3f };
+	float diff0[] = { 0.4f, 0.6f, 0.9f, 0.3f };
 	float spec0[] = { 0.5f, 0.5f, 0.7f, 1.0f };
 	float emissive[] = { 0.0f, 0.0f, 0.0f, 1.0f };
 	float shininess = 50.0f;
 	int texcount = 0;
 
-	amesh = createQuad(100.0f, 100.0f);
+	amesh = createCube();
 	memcpy(amesh.mat.ambient, amb0, 4 * sizeof(float));
 	memcpy(amesh.mat.diffuse, diff0, 4 * sizeof(float));
 	memcpy(amesh.mat.specular, spec0, 4 * sizeof(float));
@@ -1528,7 +1724,7 @@ void init()
 	float spec6[] = { 0.1f, 0.3f, 0.1f, 1.0f };
 	shininess = 10.0f;
 	
-	amesh = createQuad(10.0f, 10.0f);
+	amesh = createCube();
 	memcpy(amesh.mat.ambient, amb6, 4 * sizeof(float));
 	memcpy(amesh.mat.diffuse, diff6, 4 * sizeof(float));
 	memcpy(amesh.mat.specular, spec6, 4 * sizeof(float));
@@ -1708,6 +1904,7 @@ void init()
 	amesh.mat.texCount = texcount;
 	myMeshes.push_back(amesh);
 
+
 	//Load flare from file
 	loadFlareFile(&AVTflare, "flare.txt");
 
@@ -1717,6 +1914,9 @@ void init()
 	glEnable(GL_MULTISAMPLE);
 	//glDeleteTextures(2, TextureArray);
 	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+
+	glClearStencil(0x0);
+	glEnable(GL_STENCIL_TEST);
 
 	initCams();
 
@@ -1732,7 +1932,7 @@ int main(int argc, char **argv) {
 
 //  GLUT initialization
 	glutInit(&argc, argv);
-	glutInitDisplayMode(GLUT_DEPTH|GLUT_DOUBLE|GLUT_RGBA|GLUT_MULTISAMPLE);
+	glutInitDisplayMode(GLUT_DEPTH|GLUT_DOUBLE|GLUT_RGBA|GLUT_MULTISAMPLE|GLUT_STENCIL);
 
 	glutInitContextVersion (4, 3);
 	glutInitContextProfile (GLUT_CORE_PROFILE );
