@@ -89,7 +89,7 @@ GLint lightEnabledId;
 GLuint TextureArray[4];
 GLint texMode_uniformId;
 GLint flareEffectOnId;
-
+GLint ldirpos;
 GLint tex_loc, tex_loc1, tex_loc2, tex_flare;
 
 class AABB {
@@ -673,7 +673,7 @@ void changeSize(int w, int h) {
 	glClear(GL_STENCIL_BUFFER_BIT);
 	glEnable(GL_STENCIL_TEST);
 
-	glStencilFunc(GL_NEVER, 0x1, 0x1);
+	glStencilFunc(GL_NEVER, 0x2, 0x2);
 	glStencilOp(GL_REPLACE, GL_KEEP, GL_KEEP);
 
 	glBindVertexArray(myMeshes[13].vao);
@@ -897,8 +897,6 @@ void Lookup(int i) {
 }
 
 void draw_water() {
-	glEnable(GL_BLEND);
-	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
 	glActiveTexture(GL_TEXTURE0);
 	glBindTexture(GL_TEXTURE_2D, TextureArray[0]);
@@ -934,11 +932,10 @@ void draw_water() {
 	glUniform1i(texMode_uniformId, 1);
 	glDrawElements(myMeshes[0].type, myMeshes[0].numIndexes, GL_UNSIGNED_INT, 0);
 	glBindVertexArray(0);
-
-	glDisable(GL_BLEND);
+	popMatrix(MODEL);
 }
 
-void renderMainScene(bool rearView) {
+void renderMainScene(bool rearView, bool mirrored) {
 	GLint loc;
 
 	//Send the directional light position
@@ -953,6 +950,7 @@ void renderMainScene(bool rearView) {
 
 	for (int i = 1; i < 18; ++i) {
 		if (rearView && i >= 6 && i <= 11) continue; //don't render boat
+		if (mirrored && i == 1) continue; //don't render island
 
 		// send the material
 		loc = glGetUniformLocation(shader.getProgramIndex(), "mat.ambient");
@@ -1207,7 +1205,8 @@ void renderScene(void) {
 
 	GLint loc;
 	float res[4];
-	// set the cameras
+	float mat[16];
+	GLfloat plano_chao[4] = { 0,1,0,0 };
 	GLint m_view[4];
 
 	int windowWidth = glutGet(GLUT_WINDOW_WIDTH);
@@ -1215,7 +1214,6 @@ void renderScene(void) {
 
 	glViewport(0, 0, windowWidth, windowHeight);
 
-	glEnable(GL_STENCIL_TEST);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 	// load identity matrices
 	loadIdentity(VIEW);
@@ -1235,15 +1233,22 @@ void renderScene(void) {
 	else if (cams[active].type == ORTHOGONAL) {
 		ortho(ratio * (-25), ratio * 25, -25, 25, 0.1f, 1000.0f);
 	}
-	glStencilFunc(GL_EQUAL, 0x0, 0x1);
+	glUseProgram(shader.getProgramIndex());
+
+	glEnable(GL_STENCIL_TEST);        // reset outer shader
+	glStencilFunc(GL_NOTEQUAL, 0x2, 0x0);
+	glStencilOp(GL_KEEP, GL_REPLACE, GL_REPLACE);
+
+	glStencilFunc(GL_EQUAL, 0x0, 0x2);
 	glStencilOp(GL_KEEP, GL_KEEP, GL_KEEP);
 
-	GLint ldirpos = glGetUniformLocation(shader.getProgramIndex(), "dir_pos");
+	glStencilFunc(GL_GREATER, 0x1, 0x3);
+	glStencilOp(GL_KEEP, GL_KEEP, GL_REPLACE);
 
-	multMatrixPoint(VIEW, directionalLightDir, res);
-	glUniform4fv(ldirpos, 1, res);
+	draw_water();
 
-	glUseProgram(shader.getProgramIndex());
+	glStencilFunc(GL_EQUAL, 0x1, 0x1);
+	glStencilOp(GL_KEEP, GL_KEEP, GL_KEEP);
 
 	loc = glGetUniformLocation(shader.getProgramIndex(), "isDay");
 	if (isDay == true)
@@ -1273,13 +1278,20 @@ void renderScene(void) {
 	loc = glGetUniformLocation(shader.getProgramIndex(), "spotCosCutOff");
 	glUniform1f(loc, 0.93f);
 
+	lightPos[1] *= (-1.0f);
+	directionalLightDir[1] *= (-1.0f);
+	multMatrixPoint(VIEW, directionalLightDir, res);
+	glUniform4fv(ldirpos, 1, res);
+
 	//send the point light positions
 	for (int i = 0; i < 6; i++) {
+		pointLightPos[i][1] *= (-1.0f);
 		multMatrixPoint(VIEW, pointLightPos[i], res);
 		glUniform4fv(lPos_uniformId[i], 1, res);
 	}
 
 	for (int i = 0; i < 2; i++) {
+		spotLightPos[i][1] *= (-1.0f);
 		multMatrixPoint(VIEW, spotLightPos[i], res);
 		glUniform4fv(lPos_uniformId[6 + i], 1, res);
 	}
@@ -1287,19 +1299,90 @@ void renderScene(void) {
 	multMatrixPoint(VIEW, coneDir, res);
 	glUniform4fv(loc, 1, res);
 
-	renderMainScene(false);
+	pushMatrix(MODEL);
+	scale(MODEL, 1.0f, -1.0f, 1.0f);
+	glCullFace(GL_FRONT);
+	renderMainScene(false, true);
+	glCullFace(GL_BACK);
+	popMatrix(MODEL);
+
+	//glEnable(GL_STENCIL_TEST);        // reset outer shader
+	glStencilFunc(GL_NOTEQUAL, 0x2, 0x0);
+	glStencilOp(GL_KEEP, GL_REPLACE, GL_REPLACE);
+
+	glStencilFunc(GL_EQUAL, 0x0, 0x2);
+	glStencilOp(GL_KEEP, GL_KEEP, GL_KEEP);
+
+	//glDisable(GL_STENCIL_TEST);
+
+
+	loc = glGetUniformLocation(shader.getProgramIndex(), "isDay");
+	if (isDay == true)
+		glUniform1i(loc, 1);
+	else
+		glUniform1i(loc, 0);
+
+	loc = glGetUniformLocation(shader.getProgramIndex(), "pointLightsOn");
+	if (pointLightsOn == true)
+		glUniform1i(loc, 1);
+	else
+		glUniform1i(loc, 0);
+
+	loc = glGetUniformLocation(shader.getProgramIndex(), "spotLightsOn");
+	if (spotLightsOn == true)
+		glUniform1i(loc, 1);
+	else
+		glUniform1i(loc, 0);
+
+
+	loc = glGetUniformLocation(shader.getProgramIndex(), "fogEffectOn");
+	if (fogEffectOn == true)
+		glUniform1i(loc, 1);
+	else
+		glUniform1i(loc, 0);
+
+	loc = glGetUniformLocation(shader.getProgramIndex(), "spotCosCutOff");
+	glUniform1f(loc, 0.93f);
+
+	lightPos[1] *= (-1.0f);
+	directionalLightDir[1] *= (-1.0f);
+	multMatrixPoint(VIEW, directionalLightDir, res);
+	glUniform4fv(ldirpos, 1, res);
+
+	//send the point light positions
+	for (int i = 0; i < 6; i++) {
+		pointLightPos[i][1] *= (-1.0f);
+		multMatrixPoint(VIEW, pointLightPos[i], res);
+		glUniform4fv(lPos_uniformId[i], 1, res);
+	}
+
+	for (int i = 0; i < 2; i++) {
+		spotLightPos[i][1] *= (-1.0f);
+		multMatrixPoint(VIEW, spotLightPos[i], res);
+		glUniform4fv(lPos_uniformId[6 + i], 1, res);
+	}
+	loc = glGetUniformLocation(shader.getProgramIndex(), "coneDir");
+	multMatrixPoint(VIEW, coneDir, res);
+	glUniform4fv(loc, 1, res);
+
+
+	renderMainScene(false, false);
 	glDepthMask(GL_FALSE);
+	glEnable(GL_BLEND);
+	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 	draw_water();
+	glDisable(GL_BLEND);
 	glDepthMask(GL_TRUE);
 	renderHUD();
 
 
 	// REARVIEWTIME
 	glClear(GL_DEPTH_BUFFER_BIT);
+	glEnable(GL_STENCIL_TEST);
 
 	glViewport(windowWidth / 2 - 200, windowHeight - 200, 400, 200);
 
-	glStencilFunc(GL_EQUAL, 0x1, 0x1);
+	glStencilFunc(GL_EQUAL, 0x2, 0x2);
 	glStencilOp(GL_KEEP, GL_KEEP, GL_KEEP);
 
 	loadIdentity(VIEW);
@@ -1346,10 +1429,13 @@ void renderScene(void) {
 		glUniform4fv(lPos_uniformId[i], 1, res);
 	}
 
-	renderMainScene(true);
+	renderMainScene(true, false);
 	glDepthMask(GL_FALSE);
 	glCullFace(GL_FRONT);
+	glEnable(GL_BLEND);
+	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 	draw_water();
+	glDisable(GL_BLEND);
 	glDepthMask(GL_TRUE);
 	glDisable(GL_STENCIL_TEST);
 	glCullFace(GL_BACK);
@@ -1598,7 +1684,7 @@ GLuint setupShaders() {
 	normal_uniformId = glGetUniformLocation(shader.getProgramIndex(), "m_normal");
 	glUniform1d(lightEnabledId, 1);
 	
-
+	ldirpos = glGetUniformLocation(shader.getProgramIndex(), "dir_pos");
 	GLint LightsUniformLoc = glGetUniformLocation(shader.getProgramIndex(), "point_pos");
 	for (int i = 0; i < 6; i++) {
 		std::string result = "point_pos[" + std::to_string(i) + "]";
