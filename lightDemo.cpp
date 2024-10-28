@@ -87,7 +87,7 @@ GLint normal_uniformId;
 GLint lPos_uniformId[8];
 GLint lightEnabledId;
 GLuint TextureArray[4];
-GLint texMode_uniformId;
+GLint texMode_uniformId, shadowMode_uniformId;
 GLint flareEffectOnId;
 GLint ldirpos;
 GLint tex_loc, tex_loc1, tex_loc2, tex_flare;
@@ -382,9 +382,9 @@ void setupPointLightPos() {
 
 void setupReversePointLightPos() {
 	for (int i = 0; i < 6; i++) {
-		r_pointLightPos[i][0] = -buoy_positions[i][0];
+		r_pointLightPos[i][0] = buoy_positions[i][0];
 		r_pointLightPos[i][1] = 0.71f;
-		r_pointLightPos[i][2] = buoy_positions[i][1];
+		r_pointLightPos[i][2] = -buoy_positions[i][1];
 		r_pointLightPos[i][3] = 1.0f;
 	}
 }
@@ -1278,6 +1278,8 @@ void renderScene(void) {
 	loc = glGetUniformLocation(shader.getProgramIndex(), "spotCosCutOff");
 	glUniform1f(loc, 0.93f);
 
+	glUniform1i(shadowMode_uniformId, 0);
+
 	lightPos[1] *= (-1.0f);
 	directionalLightDir[1] *= (-1.0f);
 	multMatrixPoint(VIEW, directionalLightDir, res);
@@ -1332,8 +1334,6 @@ void renderScene(void) {
 	loc = glGetUniformLocation(shader.getProgramIndex(), "coneDir");
 	multMatrixPoint(VIEW, coneDir, res);
 	glUniform4fv(loc, 1, res);
-
-
 	renderMainScene(false, false);
 	glDepthMask(GL_FALSE);
 	glEnable(GL_BLEND);
@@ -1397,6 +1397,9 @@ void renderScene(void) {
 		glUniform1i(loc, 1);
 	else
 		glUniform1i(loc, 0);
+
+	glUniform1i(shadowMode_uniformId, 0);
+
 
 	lightPos[1] *= (-1.0f);
 	directionalLightDir[1] *= (-1.0f);
@@ -1706,6 +1709,7 @@ GLuint setupShaders() {
 	}
   
 	texMode_uniformId = glGetUniformLocation(shader.getProgramIndex(), "texMode");
+	shadowMode_uniformId = glGetUniformLocation(shader.getProgramIndex(), "shadowMode");
 	tex_loc = glGetUniformLocation(shader.getProgramIndex(), "texmap");
 	tex_loc1 = glGetUniformLocation(shader.getProgramIndex(), "texmap1");
 	tex_loc2 = glGetUniformLocation(shader.getProgramIndex(), "texmap2");
