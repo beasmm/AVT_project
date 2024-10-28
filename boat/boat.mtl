@@ -1,0 +1,10 @@
+#
+# boat.mtl
+#
+
+newmtl wood_material
+Ka 0.300 0.100 0.050      # Ambient color (white)
+Kd 0.500 0.200 0.100      # Diffuse color (white)
+Ks 0.200 0.100 0.050      # Specular color (black, no specular highlight)
+Ns 10.000                 # Shininess, low value for a matte surface
+map_Kd wood.jpg           # Diffuse texture map (using wood.jpg)

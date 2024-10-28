@@ -6,6 +6,10 @@ uniform sampler2D texmap;
 uniform sampler2D texmap1;
 uniform sampler2D texmap2;
 uniform sampler2D tex_flare;
+uniform	sampler2D texUnitDiff;
+uniform	sampler2D texUnitDiff1;
+uniform	sampler2D texUnitSpec;
+uniform	sampler2D texUnitNormalMap;
 
 uniform int texMode;
 
@@ -30,8 +34,10 @@ struct Materials {
 	float shininess;
 	int texCount;
 };
-
 uniform Materials mat;
+
+uniform bool specularMap;
+uniform uint diffMapCount;
 
 in Data {
 	vec3 normal;
@@ -39,6 +45,8 @@ in Data {
 	vec3 lightDir[8];
 	vec2 tex_coord;
 } DataIn;
+
+vec4 diff, auxSpec;
 
 void main() {
 	
@@ -62,6 +70,24 @@ void main() {
 		colorOut = vec4(0.5, 0.5, 0.5, 1.0);
 	}
 	else {
+		if (mat.texCount == 0) {
+			diff = mat.diffuse;
+			auxSpec = mat.specular;
+		}
+		else {
+			if(diffMapCount == 0)
+				diff = mat.diffuse;
+			else if(diffMapCount == 1)
+				diff = mat.diffuse * texture(texUnitDiff, DataIn.tex_coord);
+			else
+				diff = mat.diffuse * texture(texUnitDiff, DataIn.tex_coord) * texture(texUnitDiff1, DataIn.tex_coord);
+
+			if(specularMap) 
+				auxSpec = mat.specular * texture(texUnitSpec, DataIn.tex_coord);
+			else
+				auxSpec = mat.specular;
+		}
+
 		if (isDay == true) {
 			vec3 l = normalize(vec3(-dir_pos));
 			float intensity = max(dot(n,l), 0.0);
@@ -69,16 +95,16 @@ void main() {
 			if (intensity > 0.0) {
 				vec3 h = normalize(l + e);
 				float intSpec = max(dot(h, n), 0.0);
-				spec = mat.specular * pow(intSpec, mat.shininess);
+				spec = auxSpec * pow(intSpec, mat.shininess);
 			}
 
 			if(texMode == 0) {
-				colorAux += max(intensity *  mat.diffuse + spec, mat.ambient);
+				colorAux += max(intensity *  diff + spec, mat.ambient);
 			}
 			else if (texMode == 1) {
 				texel = texture(texmap, DataIn.tex_coord); 
 				texel1 = texture(texmap1, DataIn.tex_coord);
-				colorAux += vec4(max(intensity*texel*texel1 + spec, 0.07*texel*texel1).rgb, mat.diffuse.a);
+				colorAux += vec4(max(intensity*texel*texel1 + spec, 0.07*texel*texel1).rgb, diff.a);
 			}
 			else if (texMode == 3) {
 				texel2 = texture(texmap2, DataIn.tex_coord); 
@@ -90,7 +116,7 @@ void main() {
 			if (texMode == 1) {
 				texel = texture(texmap, DataIn.tex_coord); 
 				texel1 = texture(texmap1, DataIn.tex_coord);
-				colorAux += vec4((0.07*texel*texel1).rgb, mat.diffuse.a);
+				colorAux += vec4((0.07*texel*texel1).rgb, diff.a);
 			}
 			else if (texMode == 3) {
 				texel2 = texture(texmap2, DataIn.tex_coord); 
@@ -109,16 +135,16 @@ void main() {
 				if (intensity > 0.0) {
 					vec3 h = normalize(l + e);
 					float intSpec = max(dot(h,n), 0.0);
-					spec = mat.specular * pow(intSpec, mat.shininess);
+					spec = auxSpec * pow(intSpec, mat.shininess);
 				}
 				if(texMode == 0) {
-					colorPoint += intensity * mat.diffuse * 0.5 + spec;
+					colorPoint += intensity * diff * 0.5 + spec;
 				}
 				else if (texMode == 1) {
 					texel = texture(texmap, DataIn.tex_coord);
 					texel1 = texture(texmap1, DataIn.tex_coord);
 					colorPoint += max(intensity*texel*texel1 + spec, 0.07*texel*texel1);
-					colorPoint = vec4(colorPoint.rgb, mat.diffuse.a);
+					colorPoint = vec4(colorPoint.rgb, diff.a);
 				}
 				else if (texMode == 3) {
 					texel2 = texture(texmap2, DataIn.tex_coord); 
@@ -143,16 +169,16 @@ void main() {
 					if (intensity > 0.0) {
 						vec3 h = normalize(l + e);
 						float intSpec = max(dot(h,n), 0.0);
-						spec = mat.specular * pow(intSpec, mat.shininess) * att;
+						spec = auxSpec * pow(intSpec, mat.shininess) * att;
 					}
 					if(texMode == 0) {
-						colorSpot += intensity * mat.diffuse + spec;
+						colorSpot += intensity * diff + spec;
 					}
 					else if (texMode == 1) {
 						texel = texture(texmap, DataIn.tex_coord);  
 						texel1 = texture(texmap1, DataIn.tex_coord); 
 						colorSpot += max(intensity*texel*texel1 + spec, 0.07*texel*texel1);
-						colorSpot = vec4(colorSpot.rgb, mat.diffuse.a);
+						colorSpot = vec4(colorSpot.rgb, diff.a);
 					}
 					else if (texMode == 3) {
 						texel2 = texture(texmap2, DataIn.tex_coord); 
@@ -177,7 +203,7 @@ void main() {
 			texel = texture(texmap, DataIn.tex_coord);  //texel from element flare texture
 			if(texel.a == 0.0) discard;
 			else
-				colorOut = vec4((mat.diffuse * texel).rgb, 0.4);
+				colorOut = vec4((diff * texel).rgb, 0.4);
 		}
 	}	
 }

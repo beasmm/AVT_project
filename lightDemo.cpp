@@ -39,6 +39,10 @@
 #include "avtFreeType.h"
 #include "l3dBillboard.h"
 
+#include "assimp/Importer.hpp"	//OO version Header!
+#include "assimp/scene.h"
+#include "meshFromAssimp.h"
+
 #define ORTHOGONAL 0
 #define PERSPECTIVE 1
 #define MOVING 2
@@ -64,10 +68,24 @@ VSShaderLib shaderText;  //render bitmap text
 //File with the font
 const string font_name = "fonts/arial.ttf";
 
+// Create an instance of the Importer class
+Assimp::Importer importer;
+
+// the global Assimp scene object
+const aiScene* scene;
+
+// scale factor for the Assimp model to fit in the window
+float scaleFactor;
+
+char model_dir[] = "boat/";
+
 //Vector with meshes
 vector<struct MyMesh> myMeshes;
 vector<struct MyMesh> flareMeshes;
 vector<struct MyMesh> fishMeshes;
+vector<struct MyMesh> assimpMeshes;
+
+GLuint* textureIds;
 
 //active camera variable
 int active = 0;
@@ -91,6 +109,8 @@ GLint texMode_uniformId, shadowMode_uniformId;
 GLint flareEffectOnId;
 GLint ldirpos;
 GLint tex_loc, tex_loc1, tex_loc2, tex_flare;
+GLint normalMap_loc, specularMap_loc, diffMapCount_loc;
+
 
 class AABB {
 public:
@@ -742,6 +762,112 @@ void renderFish() {
 // Render stufff
 //
 
+void aiRecursive_render(const aiNode* nd, vector<struct MyMesh>& myMeshes, GLuint*& textureIds)
+{
+	GLint loc;
+
+	// Get node transformation matrix
+	aiMatrix4x4 m = nd->mTransformation;
+	// OpenGL matrices are column major
+	m.Transpose();
+
+	// save model matrix and apply node transformation
+	pushMatrix(MODEL);
+
+	float aux[16];
+	memcpy(aux, &m, sizeof(float) * 16);
+	multMatrix(MODEL, aux);
+
+
+	// draw all meshes assigned to this node
+	for (unsigned int n = 0; n < nd->mNumMeshes; ++n) {
+
+		// send the material
+		loc = glGetUniformLocation(shader.getProgramIndex(), "mat.ambient");
+		glUniform4fv(loc, 1, assimpMeshes[nd->mMeshes[n]].mat.ambient);
+		loc = glGetUniformLocation(shader.getProgramIndex(), "mat.diffuse");
+		glUniform4fv(loc, 1, assimpMeshes[nd->mMeshes[n]].mat.diffuse);
+		loc = glGetUniformLocation(shader.getProgramIndex(), "mat.specular");
+		glUniform4fv(loc, 1, assimpMeshes[nd->mMeshes[n]].mat.specular);
+		loc = glGetUniformLocation(shader.getProgramIndex(), "mat.emissive");
+		glUniform4fv(loc, 1, assimpMeshes[nd->mMeshes[n]].mat.emissive);
+		loc = glGetUniformLocation(shader.getProgramIndex(), "mat.shininess");
+		glUniform1f(loc, assimpMeshes[nd->mMeshes[n]].mat.shininess);
+		loc = glGetUniformLocation(shader.getProgramIndex(), "mat.texCount");
+		glUniform1i(loc, assimpMeshes[nd->mMeshes[n]].mat.texCount);
+
+		unsigned int  diffMapCount = 0;  //read 2 diffuse textures
+
+		//devido ao fragment shader suporta 2 texturas difusas simultaneas, 1 especular e 1 normal map
+
+		glUniform1i(normalMap_loc, false);   //GLSL normalMap variable initialized to 0
+		glUniform1i(specularMap_loc, false);
+		glUniform1ui(diffMapCount_loc, 0);
+
+		if (assimpMeshes[nd->mMeshes[n]].mat.texCount != 0)
+			for (unsigned int i = 0; i < assimpMeshes[nd->mMeshes[n]].mat.texCount; ++i) {
+
+				//Activate a TU with a Texture Object
+				GLuint TU = assimpMeshes[nd->mMeshes[n]].texUnits[i];
+				glActiveTexture(GL_TEXTURE3 + TU);
+				glBindTexture(GL_TEXTURE_2D, textureIds[TU]);
+
+				if (assimpMeshes[nd->mMeshes[n]].texTypes[i] == DIFFUSE) {
+					if (diffMapCount == 0) {
+						diffMapCount++;
+						loc = glGetUniformLocation(shader.getProgramIndex(), "texUnitDiff");
+						glUniform1i(loc, TU + 3);
+						glUniform1ui(diffMapCount_loc, diffMapCount);
+						printf("diffMapCount %d\n", diffMapCount);
+					}
+					else if (diffMapCount == 1) {
+						diffMapCount++;
+						loc = glGetUniformLocation(shader.getProgramIndex(), "texUnitDiff1");
+						glUniform1i(loc, TU + 3);
+						glUniform1ui(diffMapCount_loc, diffMapCount);
+						printf("diffMapCount %d\n", diffMapCount);
+					}
+					else printf("Only supports a Material with a maximum of 2 diffuse textures\n");
+				}
+				else if (assimpMeshes[nd->mMeshes[n]].texTypes[i] == SPECULAR) {
+					loc = glGetUniformLocation(shader.getProgramIndex(), "texUnitSpec");
+					glUniform1i(loc, TU + 3);
+					glUniform1i(specularMap_loc, true);
+				}
+				else if (assimpMeshes[nd->mMeshes[n]].texTypes[i] == NORMALS) { //Normal map
+					loc = glGetUniformLocation(shader.getProgramIndex(), "texUnitNormalMap");
+					glUniform1i(loc, TU + 3);
+
+				}
+				else printf("Texture Map not supported\n");
+			}
+
+		// send matrices to OGL
+		computeDerivedMatrix(PROJ_VIEW_MODEL);
+		glUniformMatrix4fv(vm_uniformId, 1, GL_FALSE, mCompMatrix[VIEW_MODEL]);
+		glUniformMatrix4fv(pvm_uniformId, 1, GL_FALSE, mCompMatrix[PROJ_VIEW_MODEL]);
+		computeNormalMatrix3x3();
+		glUniformMatrix3fv(normal_uniformId, 1, GL_FALSE, mNormal3x3);
+
+		// bind VAO
+		glBindVertexArray(assimpMeshes[nd->mMeshes[n]].vao);
+
+		if (!shader.isProgramValid()) {
+			printf("Program Not Valid!\n");
+			exit(1);
+		}
+		// draw
+		glDrawElements(assimpMeshes[nd->mMeshes[n]].type, assimpMeshes[nd->mMeshes[n]].numIndexes, GL_UNSIGNED_INT, 0);
+		glBindVertexArray(0);
+	}
+
+	// draw all children
+	for (unsigned int n = 0; n < nd->mNumChildren; ++n) {
+		aiRecursive_render(nd->mChildren[n], assimpMeshes, textureIds);
+	}
+	popMatrix(MODEL);
+}
+
 void renderFlare(FLARE_DEF* flare, int lX, int lY, int* m_viewport, bool rearView) {  //lX, lY represent the projected position of light on viewport
 
 	int     dx, dy;          // Screen coordinates of "destination"
@@ -951,6 +1077,7 @@ void renderMainScene(bool rearView, bool mirrored) {
 	for (int i = 1; i < 18; ++i) {
 		if (rearView && i >= 6 && i <= 11) continue; //don't render boat
 		if (mirrored && i == 1) continue; //don't render island
+		if (i == 6 || i == 7) continue; //don't render boat
 
 		// send the material
 		loc = glGetUniformLocation(shader.getProgramIndex(), "mat.ambient");
@@ -1107,6 +1234,13 @@ void renderMainScene(bool rearView, bool mirrored) {
 		}
 		popMatrix(MODEL);
 	}
+	pushMatrix(MODEL);
+	translate(MODEL, boat.position[0], 0, boat.position[2]);
+	rotate(MODEL, boat.angle - 90, 0, 1, 0);
+	scale(MODEL, scaleFactor, scaleFactor, scaleFactor);
+	rotate(MODEL, -90, 1, 0, 0);
+	aiRecursive_render(scene->mRootNode, assimpMeshes, textureIds);
+	popMatrix(MODEL);
 	renderFish();
 
 	if (flareEffectOn) {
@@ -1691,6 +1825,9 @@ GLuint setupShaders() {
 	pvm_uniformId = glGetUniformLocation(shader.getProgramIndex(), "m_pvm");
 	vm_uniformId = glGetUniformLocation(shader.getProgramIndex(), "m_viewModel");
 	normal_uniformId = glGetUniformLocation(shader.getProgramIndex(), "m_normal");
+	normalMap_loc = glGetUniformLocation(shader.getProgramIndex(), "normalMap");
+	specularMap_loc = glGetUniformLocation(shader.getProgramIndex(), "specularMap");
+	diffMapCount_loc = glGetUniformLocation(shader.getProgramIndex(), "diffMapCount");
 	glUniform1d(lightEnabledId, 1);
 	
 	ldirpos = glGetUniformLocation(shader.getProgramIndex(), "dir_pos");
@@ -1738,6 +1875,7 @@ GLuint setupShaders() {
 // Model loading and OpenGL setup
 //
 
+
 void initCams() {
 	//orth
 	cams[0].type = ORTHOGONAL;
@@ -1773,7 +1911,6 @@ void init()
 	ilInit();
 
 	// set the camera position based on its spherical coordinates
-
 	float angle_rad = boat.angle * (3.14 / 180.0f);
 
 	cams[2].camPos[0] = 0;
@@ -1935,7 +2072,6 @@ void init()
 	fishMeshes.push_back(amesh);
 
 
-	// create geometry and VAO of the sleigh
 	// create geometry and VAO of the boat
 	amesh = createCube();
 	memcpy(amesh.mat.ambient, amb3, 4 * sizeof(float));
@@ -2004,6 +2140,13 @@ void init()
 
 	//Load flare from file
 	loadFlareFile(&AVTflare, "flare.txt");
+
+
+	std::string filepath = "boat/boat.obj";
+	if (!Import3DFromFile(filepath, importer, scene, scaleFactor))
+		return;
+	assimpMeshes = createMeshFromAssimp(scene, textureIds);
+
 
 	// some GL settings
 	glEnable(GL_DEPTH_TEST);
