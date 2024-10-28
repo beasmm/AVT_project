@@ -1348,10 +1348,11 @@ void renderScene(void) {
 
 	renderMainScene(true);
 	glDepthMask(GL_FALSE);
+	glCullFace(GL_FRONT);
 	draw_water();
 	glDepthMask(GL_TRUE);
 	glDisable(GL_STENCIL_TEST);
-
+	glCullFace(GL_BACK);
 	glutSwapBuffers();
 }
 
