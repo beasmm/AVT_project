@@ -238,7 +238,7 @@ int startX, startY, tracking = 0;
 
 // Camera Spherical Coordinates
 float alpha = 39.0f, beta = 51.0f;
-float r = 20.0f;
+float r = 5.0f;
 
 // Frame counting and FPS computation
 long myTime, timebase = 0, frame = 0;
@@ -357,9 +357,10 @@ void resetBoat() {
 	boat.position[0] = 0.0;
 	boat.position[2] = 0.0;
 	boat.speed = 0.0;
+	boat.angle = 0.0;
 	cams[2].camPos[0] = 0;
-	cams[2].camPos[1] = 20 * sin(beta * 3.14f / 180.0f);
-	cams[2].camPos[2] = -20;
+	cams[2].camPos[1] = r * sin(beta * 3.14f / 180.0f);
+	cams[2].camPos[2] = -r;
 	cams[2].camTarget[0] = 0.0;
 	cams[2].camTarget[1] = 0.0;
 }
@@ -1774,7 +1775,7 @@ void processMouseMotion(int xx, int yy)
 
 	cams[2].camPos[0] = boat.position[0] + rAux * sin(alphaAux * 3.14f / 180.0f) * cos(betaAux * 3.14f / 180.0f);
 	cams[2].camPos[2] = boat.position[2] + rAux * cos(alphaAux * 3.14f / 180.0f) * cos(betaAux * 3.14f / 180.0f);
-	cams[2].camPos[1] = rAux * sin(betaAux * 3.14f / 180.0f);
+	cams[2].camPos[1] = rAux * sin(betaAux * 3.14f / 180.0f) - 1.5;
 
 //  uncomment this if not using an idle or refresh func
 //	glutPostRedisplay();
@@ -1914,7 +1915,7 @@ void init()
 	float angle_rad = boat.angle * (3.14 / 180.0f);
 
 	cams[2].camPos[0] = 0;
-	cams[2].camPos[1] = r * sin(beta * 3.14f / 180.0f);
+	cams[2].camPos[1] = r * sin(beta * 3.14f / 180.0f) - 1.5;
 	cams[2].camPos[2] = -r;
 
 	glGenTextures(4, TextureArray);
