@@ -359,7 +359,7 @@ void resetBoat() {
 	boat.speed = 0.0;
 	boat.angle = 0.0;
 	cams[2].camPos[0] = 0;
-	cams[2].camPos[1] = r * sin(beta * 3.14f / 180.0f);
+	cams[2].camPos[1] = r * sin(beta * 3.14f / 180.0f) -1.5;
 	cams[2].camPos[2] = -r;
 	cams[2].camTarget[0] = 0.0;
 	cams[2].camTarget[1] = 0.0;
@@ -710,8 +710,6 @@ void changeSize(int w, int h) {
 
 // Render the fish
 void renderFish() {
-	glDisable(GL_DEPTH_TEST);
-	glDisable(GL_CULL_FACE);
 	glEnable(GL_BLEND);
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
@@ -752,9 +750,6 @@ void renderFish() {
 
 		popMatrix(MODEL);
 	}
-
-	glEnable(GL_DEPTH_TEST);
-	glEnable(GL_CULL_FACE);
 	glDisable(GL_BLEND);
 }
 
@@ -1533,6 +1528,9 @@ void renderScene(void) {
 	else
 		glUniform1i(loc, 0);
 
+	loc = glGetUniformLocation(shader.getProgramIndex(), "spotLightsOn");
+	glUniform1i(loc, 0);
+
 	glUniform1i(shadowMode_uniformId, 0);
 
 
@@ -1547,14 +1545,12 @@ void renderScene(void) {
 		multMatrixPoint(VIEW, r_pointLightPos[i], res);
 		glUniform4fv(lPos_uniformId[i], 1, res);
 	}
-
 	pushMatrix(MODEL);
 	scale(MODEL, 1.0f, -1.0f, 1.0f);
 	glCullFace(GL_FRONT);
 	renderMainScene(true, true);
 	glCullFace(GL_BACK);
 	popMatrix(MODEL);
-
 	glStencilFunc(GL_NOTEQUAL, 0x2, 0x0); // reset outer shader
 	glStencilOp(GL_KEEP, GL_REPLACE, GL_REPLACE);
 
@@ -1575,14 +1571,14 @@ void renderScene(void) {
 	glCullFace(GL_BACK);
 	renderMainScene(true, false);
 	glDepthMask(GL_FALSE);
-	glCullFace(GL_FRONT);
+	glDisable(GL_CULL_FACE);
 	glEnable(GL_BLEND);
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 	draw_water();
 	glDisable(GL_BLEND);
 	glDepthMask(GL_TRUE);
-	glCullFace(GL_BACK);
 	glDisable(GL_STENCIL_TEST);
+	glEnable(GL_CULL_FACE);
 	glutSwapBuffers();
 }
 
